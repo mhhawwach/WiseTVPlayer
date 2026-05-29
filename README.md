@@ -5,14 +5,14 @@ Your complete entertainment — beautifully simple.
 
 ## Download
 
-**[⬇️ Download the latest APK](WiseTVPlayer-v1.0.3.apk)** — v1.0.3
+**[⬇️ Download the latest APK](WiseTVPlayer-v1.0.4.apk)** — v1.0.4
 
 > This repository distributes the installable app only. The source code is private.
 
 ## Install
 
 **On a phone / tablet**
-1. Download `WiseTVPlayer-v1.0.3.apk` to your device.
+1. Download `WiseTVPlayer-v1.0.4.apk` to your device.
 2. Open it and allow installation from this source if prompted.
 
 **On Android TV / Fire TV**
