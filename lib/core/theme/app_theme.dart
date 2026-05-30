@@ -154,6 +154,11 @@ class AppColors {
   static const Color textSecondary = Color(0xFFC4C4CC);
   static const Color textMuted     = Color(0xFF9A9AA6);
   static const Color liveRed       = Color(0xFFFF3B30);
+
+  // Bright, theme-invariant D-pad focus highlight. Deliberately a different hue
+  // from the (theme-coloured) "selected" primary so the focused element is
+  // unmistakable on a TV from across the room.
+  static const Color focus         = Color(0xFF1AE5FF);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -250,8 +255,9 @@ class AppTheme {
     ),
     iconTheme: const IconThemeData(color: AppColors.textSecondary),
     // Stronger focus highlight so Material list tiles / buttons are clearly
-    // selected when navigating with a TV remote (10-foot UI).
-    focusColor:     AppColors.primary.withValues(alpha: 0.38),
+    // selected when navigating with a TV remote (10-foot UI). Uses the bright
+    // theme-invariant focus colour for maximum visibility.
+    focusColor:     AppColors.focus.withValues(alpha: 0.42),
     hoverColor:     AppColors.primary.withValues(alpha: 0.20),
     highlightColor: AppColors.primary.withValues(alpha: 0.12),
     splashColor:    AppColors.primary.withValues(alpha: 0.12),

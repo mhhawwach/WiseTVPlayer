@@ -90,22 +90,35 @@ class _FocusableCardState extends State<FocusableCard> {
                   : const Duration(milliseconds: 150),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(widget.borderRadius),
-                // Bright, thick border so the focused item is unmistakable from
-                // across the room on a TV.
+                // Bright cyan, thick border so the focused item is unmistakable
+                // from across the room on a TV — a different hue from the
+                // (theme-coloured) "selected" state.
                 border: Border.all(
-                  color: _focused ? AppColors.primary : Colors.transparent,
-                  width: 3.5,
+                  color: _focused ? AppColors.focus : Colors.transparent,
+                  width: 4.0,
                 ),
+                // The glow is GPU-cheap to skip, so it's dropped on low-end TVs
+                // (Perf.reduceMotion). The border + foreground tint below stay,
+                // so focus is still obvious there.
                 boxShadow: (_focused && !Perf.reduceMotion)
                     ? [
                         BoxShadow(
-                          color: AppColors.primary.withValues(alpha: 0.65),
-                          blurRadius: 24,
-                          spreadRadius: 2,
+                          color: AppColors.focus.withValues(alpha: 0.7),
+                          blurRadius: 22,
+                          spreadRadius: 1,
                         )
                       ]
                     : null,
               ),
+              // A subtle cyan wash OVER the child guarantees the highlight is
+              // visible even on opaque poster art (where a background fill would
+              // be hidden). Stays on every tier so focus is never "lost".
+              foregroundDecoration: _focused
+                  ? BoxDecoration(
+                      borderRadius: BorderRadius.circular(widget.borderRadius),
+                      color: AppColors.focus.withValues(alpha: 0.12),
+                    )
+                  : null,
               child: widget.child,
             ),
           ),

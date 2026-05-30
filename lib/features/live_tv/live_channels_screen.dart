@@ -719,6 +719,16 @@ class _LiveTwoPaneScreenState extends ConsumerState<LiveTwoPaneScreen> {
   String _search = '';
   _SortMode _sort = _SortMode.defaultOrder;
 
+  // Reliably land focus on the first category once the (async) list is ready.
+  final FocusNode _firstCatFocus = FocusNode(debugLabel: 'live-first-cat');
+  bool _didInitialFocus = false;
+
+  @override
+  void dispose() {
+    _firstCatFocus.dispose();
+    super.dispose();
+  }
+
   void _select(LiveCategory c) {
     if (_catId == c.categoryId) return;
     setState(() {
@@ -759,37 +769,70 @@ class _LiveTwoPaneScreenState extends ConsumerState<LiveTwoPaneScreen> {
             ...visible,
           ];
 
+          // Land focus on the first category once the list is ready. autofocus
+          // alone is unreliable here because the items build after the loading
+          // frame, so we also request it explicitly on the first data build.
+          if (!_didInitialFocus) {
+            _didInitialFocus = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _firstCatFocus.requestFocus();
+            });
+          }
+
           return Row(
             children: [
-              // ── Left: category list ──────────────────────────────────────
+              // ── Left: search-all + category list ─────────────────────────
               SizedBox(
                 width: 264,
                 child: ColoredBox(
                   color: AppColors.surface,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    itemCount: cats.length,
-                    itemBuilder: (_, i) {
-                      final c = cats[i];
-                      return _CategoryRailItem(
-                        category: c,
-                        selected: c.categoryId == _catId,
-                        autofocus: i == 0,
-                        onSelected: () => _select(c),
-                      );
-                    },
+                  child: Column(
+                    children: [
+                      // Search across ALL channels (overrides the selected
+                      // category while there's a query).
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
+                        child: TextField(
+                          onChanged: (v) =>
+                              setState(() => _search = v.toLowerCase()),
+                          textInputAction: TextInputAction.search,
+                          decoration: const InputDecoration(
+                            hintText: 'Search all channels...',
+                            prefixIcon: Icon(Icons.search, size: 20),
+                            isDense: true,
+                            contentPadding:
+                                EdgeInsets.symmetric(vertical: 10),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: ListView.builder(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          itemCount: cats.length,
+                          itemBuilder: (_, i) {
+                            final c = cats[i];
+                            return _CategoryRailItem(
+                              category: c,
+                              selected: c.categoryId == _catId,
+                              autofocus: i == 0,
+                              focusNode: i == 0 ? _firstCatFocus : null,
+                              onSelected: () => _select(c),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
               VerticalDivider(width: 1, color: AppColors.divider),
-              // ── Right: channels of the selected category ─────────────────
+              // ── Right: channels (selected category, or all when searching) ─
               Expanded(
                 child: _LiveRightPane(
                   catId: _catId,
                   catName: _catName,
                   search: _search,
                   sort: _sort,
-                  onSearch: (v) => setState(() => _search = v.toLowerCase()),
                   onSort: (m) => setState(() => _sort = m),
                 ),
               ),
@@ -807,7 +850,6 @@ class _LiveRightPane extends ConsumerWidget {
     required this.catName,
     required this.search,
     required this.sort,
-    required this.onSearch,
     required this.onSort,
   });
 
@@ -815,12 +857,14 @@ class _LiveRightPane extends ConsumerWidget {
   final String catName;
   final String search;
   final _SortMode sort;
-  final ValueChanged<String> onSearch;
   final ValueChanged<_SortMode> onSort;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final channelsAsync = ref.watch(liveChannelsProvider(catId));
+    final searching = search.isNotEmpty;
+    // While searching, query ALL channels regardless of the selected category.
+    final effectiveCatId = searching ? AppConstants.catAllId : catId;
+    final channelsAsync = ref.watch(liveChannelsProvider(effectiveCatId));
 
     return Column(
       children: [
@@ -830,7 +874,7 @@ class _LiveRightPane extends ConsumerWidget {
             children: [
               Expanded(
                 child: Text(
-                  catName,
+                  searching ? 'Search results' : catName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -850,18 +894,6 @@ class _LiveRightPane extends ConsumerWidget {
                     .toList(),
               ),
             ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(14, 0, 12, 8),
-          child: TextField(
-            onChanged: onSearch,
-            decoration: const InputDecoration(
-              hintText: 'Search channels...',
-              prefixIcon: Icon(Icons.search, size: 20),
-              isDense: true,
-              contentPadding: EdgeInsets.symmetric(vertical: 10),
-            ),
           ),
         ),
         Expanded(
@@ -892,12 +924,14 @@ class _CategoryRailItem extends StatefulWidget {
     required this.selected,
     required this.autofocus,
     required this.onSelected,
+    this.focusNode,
   });
 
   final LiveCategory category;
   final bool selected;
   final bool autofocus;
   final VoidCallback onSelected;
+  final FocusNode? focusNode;
 
   @override
   State<_CategoryRailItem> createState() => _CategoryRailItemState();
@@ -914,6 +948,7 @@ class _CategoryRailItemState extends State<_CategoryRailItem> {
       selected: active,
       label: widget.category.categoryName,
       child: Focus(
+        focusNode: widget.focusNode,
         autofocus: widget.autofocus,
         onFocusChange: (f) {
           setState(() => _focused = f);
@@ -936,19 +971,19 @@ class _CategoryRailItemState extends State<_CategoryRailItem> {
             margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             decoration: BoxDecoration(
-              color: active
-                  ? AppColors.primary.withValues(alpha: 0.16)
-                  : _focused
-                      ? AppColors.primary.withValues(alpha: 0.08)
+              color: _focused
+                  ? AppColors.focus.withValues(alpha: 0.18)
+                  : active
+                      ? AppColors.primary.withValues(alpha: 0.16)
                       : Colors.transparent,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
                 color: _focused
-                    ? AppColors.primary.withValues(alpha: 0.6)
+                    ? AppColors.focus
                     : active
                         ? AppColors.primary.withValues(alpha: 0.3)
                         : Colors.transparent,
-                width: 1.5,
+                width: _focused ? 2.5 : 1.5,
               ),
             ),
             child: Row(

@@ -134,17 +134,17 @@ class _AspectModeButtonState extends State<AspectModeButton> {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
             color: _focused
-                ? AppColors.primary.withValues(alpha: 0.30)
+                ? AppColors.focus.withValues(alpha: 0.32)
                 : Colors.white.withAlpha(26),
             borderRadius: BorderRadius.circular(6),
             border: Border.all(
-              color: _focused ? AppColors.primary : Colors.transparent,
-              width: 2.5,
+              color: _focused ? AppColors.focus : Colors.transparent,
+              width: 3.0,
             ),
             boxShadow: _focused
                 ? [
                     BoxShadow(
-                      color: AppColors.primary.withValues(alpha: 0.6),
+                      color: AppColors.focus.withValues(alpha: 0.65),
                       blurRadius: 12,
                       spreadRadius: 1,
                     )

@@ -13,6 +13,7 @@ import '../../core/providers/wallpaper_provider.dart';
 import '../../core/storage/storage_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/content_cache_service.dart';
+import '../../core/widgets/focusable_card.dart';
 import '../../features/profiles/profiles_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -249,9 +250,11 @@ class _WallpaperPicker extends ConsumerWidget {
               final selected = mode == current;
               return Padding(
                 padding: const EdgeInsets.only(right: 10),
-                child: GestureDetector(
-                  onTap: () =>
+                child: FocusableCard(
+                  onPressed: () =>
                       ref.read(wallpaperProvider.notifier).setWallpaper(mode),
+                  borderRadius: 12,
+                  focusScale: 1.05,
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     width: 72,
@@ -404,8 +407,10 @@ class _LangChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
+    return FocusableCard(
+      onPressed: onTap,
+      borderRadius: 20,
+      focusScale: 1.05,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         padding:
@@ -532,8 +537,10 @@ class _ThemeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
+    return FocusableCard(
+      onPressed: onTap,
+      borderRadius: 14,
+      focusScale: 1.03,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOut,

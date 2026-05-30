@@ -81,17 +81,17 @@ class _PlayerControlButtonState extends State<PlayerControlButton> {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: _focused
-                  ? AppColors.primary.withValues(alpha: 0.30)
+                  ? AppColors.focus.withValues(alpha: 0.32)
                   : Colors.transparent,
               border: Border.all(
-                color: _focused ? AppColors.primary : Colors.transparent,
-                width: 2.5,
+                color: _focused ? AppColors.focus : Colors.transparent,
+                width: 3.0,
               ),
               boxShadow: _focused
                   ? [
                       BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.6),
-                        blurRadius: 14,
+                        color: AppColors.focus.withValues(alpha: 0.65),
+                        blurRadius: 16,
                         spreadRadius: 1,
                       )
                     ]
