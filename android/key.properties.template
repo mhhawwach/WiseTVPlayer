@@ -1,0 +1,19 @@
+# Copy this file to android/key.properties and fill in your real values.
+# NEVER commit key.properties — it contains secrets and is listed in .gitignore.
+#
+# To generate a new keystore run:  scripts\generate_keystore.ps1
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Path to the .jks keystore file.
+# Use a forward-slash path relative to the android/ directory,
+# or an absolute path. Example: ../keystore/wisetv-release.jks
+storeFile=../keystore/wisetv-release.jks
+
+# Password set when the keystore was created
+storePassword=YOUR_STORE_PASSWORD
+
+# The key alias chosen during keytool -genkey
+keyAlias=wisetv
+
+# Password set for this specific key entry
+keyPassword=YOUR_KEY_PASSWORD

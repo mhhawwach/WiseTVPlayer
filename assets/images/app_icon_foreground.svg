@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  WiseTVPlayer — Adaptive Icon Foreground (transparent background)
+  Canvas: 1024×1024.  Content lives inside the safe zone: ~680×680 centred.
+  The adaptive-icon background tile is solid #0A0A0F (set in pubspec).
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="playGrad" gradientUnits="userSpaceOnUse"
+                    x1="300" y1="228" x2="750" y2="660">
+      <stop offset="0%"   stop-color="#A89BFF"/>
+      <stop offset="40%"  stop-color="#6C63FF"/>
+      <stop offset="100%" stop-color="#00D4AA"/>
+    </linearGradient>
+    <linearGradient id="bodyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#26263A"/>
+      <stop offset="100%" stop-color="#18181F"/>
+    </linearGradient>
+    <linearGradient id="screenSheen" x1="0%" y1="0%" x2="80%" y2="80%">
+      <stop offset="0%"  stop-color="#FFFFFF" stop-opacity="0.055"/>
+      <stop offset="60%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Content centred inside safe zone (172 → 852 on each axis) -->
+
+  <!-- TV body -->
+  <rect x="172" y="200" width="680" height="456" rx="52" fill="url(#bodyGrad)"/>
+  <!-- Screen -->
+  <rect x="196" y="224" width="632" height="408" rx="38" fill="#08080E"/>
+  <rect x="196" y="224" width="632" height="408" rx="38" fill="url(#screenSheen)"/>
+  <rect x="196" y="224" width="632" height="408" rx="38"
+        fill="none" stroke="#FFFFFF" stroke-opacity="0.04" stroke-width="2"/>
+
+  <!-- Play triangle (fits within screen: approx 240→631 horizontally, 252→604 vertically) -->
+  <polygon points="268,252 268,604 660,428" fill="url(#playGrad)"/>
+
+  <!-- Stand -->
+  <rect x="472" y="656" width="80"  height="48"  rx="12" fill="#16161E"/>
+  <rect x="368" y="704" width="288" height="40"  rx="20" fill="#16161E"/>
+</svg>

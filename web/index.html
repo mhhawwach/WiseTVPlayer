@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    WiseTVPlayer — Flutter Web entry point
+    Targets: LG WebOS (Chromium), standard browsers
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+
+  <!-- WebOS: disable text selection and context menu (TV UX) -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+
+  <title>WiseVodPlayer</title>
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Prevent flash of white background -->
+  <style>
+    body {
+      background-color: #0A0A0F;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+    /* Hide scrollbars on WebOS */
+    ::-webkit-scrollbar { display: none; }
+  </style>
+</head>
+<body>
+  <!-- mpegts.js — plays MPEG-TS (.ts) live streams via MSE. WebOS Chromium
+       cannot play raw MPEG-TS in a bare <video>, and Xtream live channels are
+       /live/.../<id>.ts, so this is required for live TV on webOS. -->
+  <script src="mpegts.js"></script>
+  <script>
+    // Bridge called from Dart (web_player_impl.dart). Routes .ts streams
+    // through mpegts.js; everything else (MP4/MKV/HLS) uses the native <video>.
+    (function () {
+      function isTs(u) { return /\.ts(\?|#|$)/i.test(u); }
+      function playNative(video, url) {
+        video.src = url;
+        var p = video.play();
+        if (p && p.catch) p.catch(function () {});
+      }
+      window.wisetvOpen = function (video, url) {
+        if (!video) return false;
+        // Tear down any mpegts player attached to this element first.
+        if (video._wisetvPlayer) {
+          try { video._wisetvPlayer.destroy(); } catch (e) {}
+          video._wisetvPlayer = null;
+        }
+        var canTs = window.mpegts && mpegts.getFeatureList &&
+            mpegts.getFeatureList().mseLivePlayback;
+        if (isTs(url) && canTs) {
+          try {
+            var player = mpegts.createPlayer(
+              { type: 'mpegts', isLive: true, url: url },
+              { liveBufferLatencyChasing: true, enableWorker: true });
+            player.attachMediaElement(video);
+            player.load();
+            var pp = video.play();
+            if (pp && pp.catch) pp.catch(function () {});
+            video._wisetvPlayer = player;
+            return true;
+          } catch (e) {
+            // Fall back to native if mpegts fails to init.
+            playNative(video, url);
+            return true;
+          }
+        }
+        playNative(video, url);
+        return true;
+      };
+      window.wisetvDispose = function (video) {
+        if (!video) return;
+        if (video._wisetvPlayer) {
+          try { video._wisetvPlayer.destroy(); } catch (e) {}
+          video._wisetvPlayer = null;
+        }
+        try { video.pause(); video.removeAttribute('src'); video.load(); } catch (e) {}
+      };
+    })();
+  </script>
+
+  <!-- This script installs the Flutter service worker and bootstraps the app.
+       LG WebOS Chromium supports service workers from WebOS 4+ -->
+  <script src="flutter_bootstrap.js" async></script>
+
+  <!--
+    WebOS Magic Remote key codes (for reference — handled in Dart via
+    LogicalKeyboardKey in the player screens):
+      Back       = 461  (maps to LogicalKeyboardKey.goBack)
+      Enter/OK   = 13   (LogicalKeyboardKey.enter)
+      Up/Down/Left/Right = arrow keys
+      Play/Pause = 415 / 19
+      Stop       = 413
+      Fast Fwd   = 417
+      Rewind     = 412
+      Red        = 403
+      Green      = 404
+      Yellow     = 405
+      Blue       = 406
+  -->
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "id": "com.wiseapps.wisetv",
+  "version": "1.0.3",
+  "vendor": "WiseApps",
+  "type": "web",
+  "main": "index.html",
+  "title": "WiseVodPlayer",
+  "icon": "icon192.png",
+  "iconColor": "#0A0A0F",
+  "transparent": false,
+  "resizable": false,
+  "requiredPermissions": [
+    "NETWORK_VIEW",
+    "MEDIA_AUDIO_CAPTURE",
+    "MEDIA_VIDEO_CAPTURE"
+  ]
+}

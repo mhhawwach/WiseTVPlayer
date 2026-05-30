@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  WiseTVPlayer adaptive icon foreground.
+  Canvas: 108×108dp.  Safe zone: 72×72dp centred (x/y 18→90).
+  API 26+ only (adaptive icon requirement), so gradients are safe.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- TV body: rounded rect, top-to-bottom gradient for depth -->
+    <path android:pathData="M22,25 L86,25 Q90,25 90,29 L90,70 Q90,74 86,74 L22,74 Q18,74 18,70 L18,29 Q18,25 22,25 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="18" android:startY="25"
+                android:endX="18"   android:endY="74">
+                <item android:offset="0"   android:color="#FF26263A"/>
+                <item android:offset="1"   android:color="#FF18181F"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Screen recess (very dark blue-black) -->
+    <path android:pathData="M20.5,27.5 L87.5,27.5 Q91,27.5 91,31 L91,68 Q91,71.5 87.5,71.5 L20.5,71.5 Q17,71.5 17,68 L17,31 Q17,27.5 20.5,27.5 Z"
+        android:fillColor="#08080E"/>
+
+    <!-- Screen highlight sheen (top-left white, very subtle) -->
+    <path android:pathData="M20.5,27.5 L87.5,27.5 Q91,27.5 91,31 L91,68 Q91,71.5 87.5,71.5 L20.5,71.5 Q17,71.5 17,68 L17,31 Q17,27.5 20.5,27.5 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="17" android:startY="27"
+                android:endX="70"   android:endY="72">
+                <item android:offset="0"   android:color="#0DFFFFFF"/>
+                <item android:offset="0.6" android:color="#00FFFFFF"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Play triangle: A(29,31) B(29,66) C(77,48.5) — centred in screen -->
+    <path android:pathData="M29,31 L29,66 L77,48.5 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="29" android:startY="31"
+                android:endX="77"   android:endY="66">
+                <item android:offset="0"    android:color="#FFA89BFF"/>
+                <item android:offset="0.40" android:color="#FF6C63FF"/>
+                <item android:offset="1"    android:color="#FF00D4AA"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- TV stand — neck -->
+    <path android:pathData="M50,74 L58,74 Q59.5,74 59.5,75.5 L59.5,80 Q59.5,81 58,81 L50,81 Q48.5,81 48.5,80 L48.5,75.5 Q48.5,74 50,74 Z"
+        android:fillColor="#16161E"/>
+
+    <!-- TV stand — base -->
+    <path android:pathData="M38,81 L70,81 Q72,81 72,83 L72,87 Q72,89 70,89 L38,89 Q36,89 36,87 L36,83 Q36,81 38,81 Z"
+        android:fillColor="#16161E"/>
+
+</vector>

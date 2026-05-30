@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns="http://tizen.org/ns/packages"
+          api-version="6.5"
+          package="com.wiseapps.wisetv"
+          version="1.0.0">
+
+  <!-- Samsung TV profile (Tizen 6.5 = 2022+ TVs; lower to 5.5 for 2019+ TVs) -->
+  <profile name="tv-samsung"/>
+
+  <ui-application appid="com.wiseapps.wisetv.wisetv"
+                  exec="runner/lib/libapp.so"
+                  multiple="false"
+                  nodisplay="false"
+                  taskmanage="true"
+                  type="dotnet-nui"
+                  hw-acceleration="on">
+    <label>WiseTVPlayer</label>
+    <icon>icon/wisetv.png</icon>
+
+    <!-- TV remote key categories to receive -->
+    <metadata key="http://samsung.com/tv/metadata/use.screen.lock" value="false"/>
+    <metadata key="http://samsung.com/tv/metadata/use.button" value="true"/>
+  </ui-application>
+
+  <privileges>
+    <!-- Network access for IPTV streams -->
+    <privilege>http://tizen.org/privilege/internet</privilege>
+    <!-- Media playback -->
+    <privilege>http://tizen.org/privilege/mediastorage</privilege>
+    <privilege>http://tizen.org/privilege/externalstorage</privilege>
+    <!-- Keep screen on during playback -->
+    <privilege>http://tizen.org/privilege/display</privilege>
+  </privileges>
+
+</manifest>

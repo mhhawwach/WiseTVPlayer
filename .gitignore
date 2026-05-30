@@ -1,0 +1,36 @@
+# Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+*.g.dart
+!lib/data/models/playlist.g.dart
+
+# Android
+android/local.properties
+android/.gradle/
+android/captures/
+*.jks
+*.keystore
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+*.xcworkspace
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Env / secrets
+.env
+google-services.json
+GoogleService-Info.plist
+
+# Release signing — never commit real key.properties
+android/key.properties
+keystore/

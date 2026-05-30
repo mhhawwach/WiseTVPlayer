@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  WiseTVPlayer — App Icon Master
+  Canvas: 1024×1024  |  Safe zone: 820×820 centred
+  Use tools/generate_icon.py to export PNG for flutter_launcher_icons.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <!-- Rich radial background: slightly lighter at centre for depth -->
+    <radialGradient id="bgGrad" cx="45%" cy="40%" r="68%">
+      <stop offset="0%"   stop-color="#1E1E2C"/>
+      <stop offset="100%" stop-color="#07070F"/>
+    </radialGradient>
+
+    <!-- Play-button gradient: lavender-purple → electric teal, diagonal -->
+    <linearGradient id="playGrad" gradientUnits="userSpaceOnUse"
+                    x1="300" y1="228" x2="750" y2="660">
+      <stop offset="0%"   stop-color="#A89BFF"/>
+      <stop offset="40%"  stop-color="#6C63FF"/>
+      <stop offset="100%" stop-color="#00D4AA"/>
+    </linearGradient>
+
+    <!-- Subtle screen highlight: faint white sheen top-left corner -->
+    <linearGradient id="screenSheen" x1="0%" y1="0%" x2="80%" y2="80%">
+      <stop offset="0%"  stop-color="#FFFFFF" stop-opacity="0.055"/>
+      <stop offset="60%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- TV body top-face gradient for slight 3-D pop -->
+    <linearGradient id="bodyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#26263A"/>
+      <stop offset="100%" stop-color="#18181F"/>
+    </linearGradient>
+  </defs>
+
+  <!-- ── Background ─────────────────────────────────────────────────── -->
+  <rect width="1024" height="1024" fill="url(#bgGrad)"/>
+
+  <!-- ── TV body ────────────────────────────────────────────────────── -->
+  <!-- Outer shell: rounded rect with a top-down gradient for subtle depth -->
+  <rect x="88"  y="152" width="848" height="572" rx="62" fill="url(#bodyGrad)"/>
+
+  <!-- Inner screen recess: very dark blue-black -->
+  <rect x="116" y="180" width="792" height="516" rx="46" fill="#08080E"/>
+
+  <!-- Screen highlight sheen -->
+  <rect x="116" y="180" width="792" height="516" rx="46" fill="url(#screenSheen)"/>
+
+  <!-- ── Play triangle ──────────────────────────────────────────────── -->
+  <!--
+    A = (300, 228)  top-left vertex
+    B = (300, 660)  bottom-left vertex
+    C = (754, 444)  right tip  (centred vertically: (228+660)/2 = 444 ✓)
+  -->
+  <polygon points="300,228 300,660 754,444" fill="url(#playGrad)"/>
+
+  <!-- ── TV stand ───────────────────────────────────────────────────── -->
+  <!-- Neck -->
+  <rect x="464" y="724" width="96"  height="54"  rx="14" fill="#16161E"/>
+  <!-- Base -->
+  <rect x="336" y="778" width="352" height="46"  rx="23" fill="#16161E"/>
+
+  <!-- ── Subtle inner border on the screen for a crisp "bezel" feel ── -->
+  <rect x="116" y="180" width="792" height="516" rx="46"
+        fill="none" stroke="#FFFFFF" stroke-opacity="0.04" stroke-width="2"/>
+</svg>

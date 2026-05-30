@@ -1,0 +1,4 @@
+# flutter-tizen project definition
+APPNAME = wisetv
+type = app
+profile = tv-samsung
