@@ -235,6 +235,22 @@ class _VodPlayerScreenState extends State<VodPlayerScreen>
     showTrackPicker(context, _player).then((_) => _enterImmersive());
   }
 
+  void _toggleFavourite() {
+    final v = widget.args.vod;
+    final type = widget.args.historyType; // 'vod' or 'series'
+    StorageService.toggleFavourite(type, v.streamId, {
+      'type': type, 'id': v.streamId, 'name': v.name,
+      'icon': v.streamIcon, 'ext': v.containerExtension,
+    });
+    final fav = StorageService.isFavourite(type, v.streamId);
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(
+        content: Text(fav ? '★ Added to Favourites' : 'Removed from Favourites'),
+        duration: const Duration(seconds: 2),
+      ));
+  }
+
   void _enterPip() => PipService.instance.enter();
 
   // ── Build ─────────────────────────────────────────────────────────────────
@@ -257,6 +273,26 @@ class _VodPlayerScreenState extends State<VodPlayerScreen>
               return KeyEventResult.handled;
             }
             Navigator.of(context).pop();
+            return KeyEventResult.handled;
+          }
+
+          // Colour buttons: Yellow = Favourite, Red = Stats, Green = Tracks,
+          // Blue = Aspect ratio.
+          if (event.logicalKey == LogicalKeyboardKey.colorF2Yellow) {
+            _toggleFavourite();
+            return KeyEventResult.handled;
+          }
+          if (event.logicalKey == LogicalKeyboardKey.colorF0Red) {
+            setState(() => _statsVisible = !_statsVisible);
+            return KeyEventResult.handled;
+          }
+          if (event.logicalKey == LogicalKeyboardKey.colorF1Green) {
+            _showTrackPicker();
+            return KeyEventResult.handled;
+          }
+          if (event.logicalKey == LogicalKeyboardKey.colorF3Blue) {
+            setState(() => _aspectMode = _aspectMode.next);
+            _showControls();
             return KeyEventResult.handled;
           }
 

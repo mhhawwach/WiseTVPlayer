@@ -203,6 +203,19 @@ class _LivePlayerScreenState extends State<LivePlayerScreen>
     showTrackPicker(context, _player).then((_) => _enterImmersive());
   }
 
+  void _toggleFavourite(LiveStream ch) {
+    StorageService.toggleFavourite('live', ch.streamId, {
+      'type': 'live', 'id': ch.streamId, 'name': ch.name, 'icon': ch.streamIcon,
+    });
+    final fav = StorageService.isFavourite('live', ch.streamId);
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(
+        content: Text(fav ? '★ Added to Favourites' : 'Removed from Favourites'),
+        duration: const Duration(seconds: 2),
+      ));
+  }
+
   void _enterPip() => PipService.instance.enter();
 
   // ── Build ─────────────────────────────────────────────────────────────────
@@ -239,6 +252,26 @@ class _LivePlayerScreenState extends State<LivePlayerScreen>
           }
           if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
             _nextChannel();
+            _showControls();
+            return KeyEventResult.handled;
+          }
+
+          // Colour buttons: Yellow = Favourite, Red = Stats, Green = Tracks,
+          // Blue = Aspect ratio.
+          if (event.logicalKey == LogicalKeyboardKey.colorF2Yellow) {
+            _toggleFavourite(ch);
+            return KeyEventResult.handled;
+          }
+          if (event.logicalKey == LogicalKeyboardKey.colorF0Red) {
+            setState(() => _statsVisible = !_statsVisible);
+            return KeyEventResult.handled;
+          }
+          if (event.logicalKey == LogicalKeyboardKey.colorF1Green) {
+            _showTrackPicker();
+            return KeyEventResult.handled;
+          }
+          if (event.logicalKey == LogicalKeyboardKey.colorF3Blue) {
+            setState(() => _aspectMode = _aspectMode.next);
             _showControls();
             return KeyEventResult.handled;
           }
