@@ -22,7 +22,7 @@
     var spin = el('div', { class: 'spinner spin' });
     var title = el('div', { class: 'title', text: opts.title || '' });
     var status = el('div', { class: 'sub', style: { color: '#A6A6B8', fontSize: '18px', marginTop: '8px' } });
-    var hint = el('div', { class: 'phint', text: (isLive ? 'OK Pause' : 'OK Pause   ◀ ▶ Seek') + '   🔵 Aspect   🟡 Audio   🟢 Subtitle' });
+    var hint = el('div', { class: 'phint', text: (isLive ? 'OK Pause' : 'OK Pause   ◀ ▶ Seek') + '   🔴 Audio   🟢 Subtitle   🟡 Favourite   🔵 Aspect' });
     ctl = el('div', { class: 'ctl' }, [title, isLive ? null : el('div', { class: 'bar' }, bar), status, hint]);
     var screen = el('div', { class: 'screen player' }, [video, spin, ctl]);
 
@@ -89,6 +89,15 @@
       if (nx >= t.length) { toast('Subtitles: Off'); return; }
       t[nx].mode = 'showing'; toast('Subtitles: ' + (t[nx].language || t[nx].label || ('Track ' + (nx + 1))));
     }
+    function toggleFav() {
+      if (!H) return;
+      var fav = H.type === 'series'
+        ? { type: 'series', id: H.seriesId, name: H.seriesName, icon: H.icon }
+        : { type: H.type, id: H.id, name: H.name, icon: H.icon, ext: H.ext };
+      if (!fav.id) { toast('Cannot favourite this'); return; }
+      var added = Store.toggleFav(fav);
+      toast(added ? '★ Added to Favourites' : 'Removed from Favourites');
+    }
 
     function cleanup() {
       if (hideT) clearTimeout(hideT); if (saveT) clearInterval(saveT);
@@ -107,9 +116,10 @@
       showCtl();
       if (k === 13) { if (video.paused) video.play(); else video.pause(); return true; }
       if (!isLive && (k === 39 || k === 37)) { var d = k === 39 ? 15 : -15; try { video.currentTime = Math.max(0, video.currentTime + d); } catch (x) {} return true; }
-      if (k === 406) { cycleAspect(); return true; }       // Blue
-      if (k === 405) { cycleAudio(); return true; }         // Yellow
-      if (k === 404) { cycleSub(); return true; }           // Green
+      if (k === 403) { cycleAudio(); return true; }         // Red    = Audio
+      if (k === 404) { cycleSub(); return true; }           // Green  = Subtitle
+      if (k === 405) { toggleFav(); return true; }          // Yellow = Favourite
+      if (k === 406) { cycleAspect(); return true; }        // Blue   = Aspect
       if (k === 38 || k === 40 || k === 37 || k === 39) return true;
       return false;
     };
@@ -121,6 +131,38 @@
   }
 
   W.Player = {
+    // Lightweight MUTED preview controller for the live list (IPTV-Smarters-style
+    // mini-viewer). Reuses the HLS→mpegts path. One stream at a time (the TV has a
+    // single hardware decoder) — callers must stop() before opening fullscreen.
+    preview: function (videoEl) {
+      var pmp = null, ptried = false;
+      function stop() {
+        try { if (pmp) { pmp.destroy(); pmp = null; } } catch (e) {}
+        try { videoEl.onerror = null; videoEl.pause(); videoEl.removeAttribute('src'); videoEl.load(); } catch (e) {}
+      }
+      function play(ch) {
+        stop();
+        var pl = Store.active(); if (!pl) return;
+        ptried = false;
+        var hls = Api.liveUrlHls(pl, ch.stream_id), ts = Api.liveUrlTs(pl, ch.stream_id);
+        videoEl.muted = true;
+        videoEl.onerror = function () {
+          if (!ptried && window.mpegts && window.mpegts.isSupported && window.mpegts.isSupported()) {
+            ptried = true;
+            try {
+              if (pmp) { pmp.destroy(); pmp = null; }
+              videoEl.removeAttribute('src');
+              pmp = window.mpegts.createPlayer({ type: 'mpegts', isLive: true, url: ts }, { liveBufferLatencyChasing: true });
+              pmp.attachMediaElement(videoEl); pmp.load();
+              var p2 = videoEl.play(); if (p2 && p2.catch) p2.catch(function () {});
+            } catch (e) {}
+          }
+        };
+        videoEl.src = hls;
+        var p = videoEl.play(); if (p && p.catch) p.catch(function () {});
+      }
+      return { play: play, stop: stop };
+    },
     openLive: function (it) {
       open({ title: it.name, srcHls: Api.liveUrlHls(Store.active(), it.stream_id), srcTs: Api.liveUrlTs(Store.active(), it.stream_id), live: true,
         hist: { type: 'live', id: it.stream_id, name: it.name, icon: it.stream_icon } });
@@ -131,7 +173,7 @@
     },
     openEpisode: function (s, ep, fromStart) {
       open({ title: (s.name || '') + '  ·  E' + (ep.episode_num || ''), src: Api.epUrl(Store.active(), ep.id, ep.container_extension), live: false, fromStart: !!fromStart,
-        hist: { type: 'series', id: ep.id, name: (s.name || '') + ' · E' + (ep.episode_num || ''), icon: s.cover, ext: ep.container_extension, seriesName: s.name, epNum: ep.episode_num } });
+        hist: { type: 'series', id: ep.id, seriesId: s.series_id, name: (s.name || '') + ' · E' + (ep.episode_num || ''), icon: s.cover, ext: ep.container_extension, seriesName: s.name, epNum: ep.episode_num } });
     }
   };
 })();

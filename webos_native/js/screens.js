@@ -207,14 +207,14 @@
       var visible = cats.filter(function (c) { return !blocked[c.category_id] && !Store.isHidden(c.category_id); });
       body.innerHTML = '';
       var allName = section === 'live' ? 'All Channels' : section === 'movies' ? 'All Movies' : 'All Series';
-      body.appendChild(catRow('▦', allName, '', function () { Router.push(listScreen(section, ALL, allName)); }, true));
+      body.appendChild(catRow('▦', allName, '', function () { openCatList(section, ALL, allName); }, true));
       visible.forEach(function (c, i) {
         var locked = Store.isLocked(c.category_id);
         body.appendChild(catRow(locked ? '🔒' : '▣', c.category_name, '', function () {
           if (locked) {
-            W.More.pinVerify('Enter PIN to open ' + c.category_name).then(function (ok) { if (ok) Router.push(listScreen(section, c.category_id, c.category_name)); });
+            W.More.pinVerify('Enter PIN to open ' + c.category_name).then(function (ok) { if (ok) openCatList(section, c.category_id, c.category_name); });
           } else {
-            Router.push(listScreen(section, c.category_id, c.category_name));
+            openCatList(section, c.category_id, c.category_name);
           }
         }, false));
       });
@@ -302,6 +302,77 @@
     } else {
       Router.push(seriesDetail(it));
     }
+  }
+
+  // Route a category open: Live uses the split preview screen (which self-pushes
+  // so it can register its preview-cleanup onBack); Movies/Series use the grid.
+  function openCatList(section, id, name) {
+    if (section === 'live') liveListScreen(id, name);
+    else Router.push(listScreen(section, id, name));
+  }
+
+  // ── Live list with mini-preview (IPTV-Smarters style) ────────────────────────────
+  function liveListScreen(catId, catName) {
+    var pl = Store.active();
+    var pv = el('video', { muted: 'muted', autoplay: 'autoplay', playsinline: 'playsinline' });
+    var pvName = el('div', { class: 'pv-name', text: catName });
+    var listEl = el('div', { class: 'clist' }, centerSpinner());
+    var preview = el('div', { class: 'preview' }, [
+      el('div', { class: 'pv-video' }, pv), pvName,
+      el('div', { class: 'pv-hint', text: 'OK = watch fullscreen   ·   🟡 = favourite' })
+    ]);
+    var scr = el('div', { class: 'screen' }, [topbar(catName), el('div', { class: 'live-split' }, [listEl, preview])]);
+
+    var pc = W.Player.preview(pv);
+    var pvT = null;
+    function schedule(ch) { if (pvT) clearTimeout(pvT); pvT = setTimeout(function () { pvName.textContent = ch.name; pc.play(ch); }, 700); }
+    function openFull(ch) { if (pvT) clearTimeout(pvT); pc.stop(); W.Player.openLive(ch); }
+    function cleanup() { if (pvT) clearTimeout(pvT); pc.stop(); document.documentElement.classList.remove('previewing'); document.body.classList.remove('previewing'); }
+
+    var dataP = Api.liveStreams(pl, catId === ALL ? null : catId);
+    var catsP = catId === ALL ? Api.liveCats(pl) : Promise.resolve(null);
+    Promise.all([dataP, catsP.then(null, function () { return null; })]).then(function (res) {
+      var items = res[0] || [], cats = res[1];
+      if (catId === ALL && cats) {
+        var bl = Lang.blocked(cats, selectedLangs(pl, cats));
+        items = items.filter(function (c) { return !bl[c.category_id]; });
+      }
+      listEl.innerHTML = '';
+      if (!items.length) { listEl.appendChild(el('div', { class: 'center', text: 'No channels.' })); return; }
+      renderChanList(listEl, items, schedule, openFull);
+      Nav.setScope(scr); Nav.focusFirst();
+    }, function (e) { listEl.innerHTML = ''; listEl.appendChild(el('div', { class: 'center', text: 'Failed: ' + e.message })); });
+
+    // Reveal the hardware video plane in the preview region (webOS): body
+    // transparent, list opaque, preview transparent.
+    document.documentElement.classList.add('previewing');
+    document.body.classList.add('previewing');
+    scr._onShow = function () { document.documentElement.classList.add('previewing'); document.body.classList.add('previewing'); };
+    Router.push(scr, { onBack: cleanup });
+    return scr;
+  }
+
+  function renderChanList(container, items, schedule, openFull) {
+    var BATCH = 80, rendered = 0;
+    function row(ch, idx) {
+      var logo = el('div', { class: 'clogo-wrap' });
+      if (ch.stream_icon) { var im = el('img', { class: 'clogo', loading: 'lazy', src: ch.stream_icon }); im.onerror = function () { im.remove(); }; logo.appendChild(im); }
+      var r = el('div', { class: 'crow focusable', onclick: function () { openFull(ch); } }, [
+        el('div', { class: 'cnum', text: '' + (idx + 1) }), logo, el('div', { class: 'cname', text: ch.name })
+      ]);
+      if (idx === 0) r.setAttribute('data-autofocus', '1');
+      r._onFocus = function () { schedule(ch); if (idx >= rendered - 16) renderMore(); };
+      return r;
+    }
+    function renderMore() {
+      if (rendered >= items.length) return;
+      var frag = document.createDocumentFragment();
+      var end = Math.min(rendered + BATCH, items.length);
+      for (; rendered < end; rendered++) frag.appendChild(row(items[rendered], rendered));
+      container.appendChild(frag);
+    }
+    renderMore();
+    container.addEventListener('scroll', function () { if (container.scrollTop + container.clientHeight > container.scrollHeight - 600) renderMore(); });
   }
 
   function favButton(type, favItem) {
