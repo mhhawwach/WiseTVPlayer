@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets"
+        id="http://wiseapps.com/wisevodplayer" version="2.0.0" viewmodes="maximized">
+    <!-- packageId (WiseVod001) is 10 chars; Tizen Studio may reassign it to match
+         your signing profile. appId = packageId + "." + appName. -->
+    <tizen:application id="WiseVod001.WiseVodPlayer" package="WiseVod001" required_version="2.4"/>
+    <content src="index.html"/>
+    <icon src="icon.png"/>
+    <name>WiseVodPlayer</name>
+
+    <tizen:profile name="tv"/>
+    <feature name="http://tizen.org/feature/screen.size.all"/>
+
+    <!-- Network (Xtream API + streams) and remote-control keys. -->
+    <tizen:privilege name="http://tizen.org/privilege/internet"/>
+    <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
+    <access origin="*" subdomains="true"/>
+
+    <!-- Landscape, dark, and hwkey-event so the Back/Return key reaches the app. -->
+    <tizen:setting screen-orientation="landscape" context-menu="disable"
+                   background-support="disable" encryption="disable"
+                   install-location="auto" hwkey-event="enable"/>
+</widget>

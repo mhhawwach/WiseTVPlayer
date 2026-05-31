@@ -7,8 +7,11 @@
     // At the root, Back exits the app (webOS) instead of doing nothing.
     W.onRootBack = function () {
       try {
-        if (window.webOS && window.webOS.platformBack) window.webOS.platformBack();
-        else window.close();
+        if (W.platform === 'tizen' && window.tizen && window.tizen.application) {
+          window.tizen.application.getCurrentApplication().exit();
+        } else if (window.webOS && window.webOS.platformBack) {
+          window.webOS.platformBack();
+        } else { window.close(); }
       } catch (e) {}
     };
     W.Store.ensureProfile();

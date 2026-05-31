@@ -1,96 +1,40 @@
-#Requires -Version 5.1
-<#
-.SYNOPSIS
-    Builds a WiseTVPlayer .tpk for Samsung Smart TV (Tizen OS).
+# Build the Samsung Tizen .wgt from the SHARED web app (webos_native/) plus the
+# Tizen project files (tizen_native/). One codebase, two TV packages.
+#
+# (This replaces the old flutter-tizen .tpk builder — Flutter is too heavy for
+#  these TVs; the native web app is the supported path now.)
+#
+# Requires Tizen Studio's `tizen` CLI on PATH and a security profile (a Samsung
+# certificate) — see TIZEN_BUILD.md. If the CLI isn't found, this still stages a
+# ready-to-open Tizen project at build\tizen for import into Tizen Studio.
+param([string]$SecProfile = 'default')
+$ErrorActionPreference = 'Continue'
+$root  = Split-Path $PSScriptRoot -Parent
+$stage = Join-Path $root 'build\tizen'
 
-.DESCRIPTION
-    Prerequisites (one-time setup):
-      1. Install Tizen Studio: https://developer.tizen.org/development/tizen-studio/download
-      2. Install the flutter-tizen CLI:
-           https://github.com/flutter-tizen/flutter-tizen/blob/master/doc/install-tizen-sdk.md
-         OR: dart pub global activate flutter_tizen
-      3. Register your Samsung TV in Tizen Studio (Device Manager)
-         and enable Developer Mode on the TV:
-           TV Settings → Device Manager → Developer Mode → ON
-      4. Create a Samsung certificate via Tizen Studio Certificate Manager.
+Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force $stage | Out-Null
 
-    Build + deploy:
-      .\scripts\build_tizen.ps1
-      .\scripts\build_tizen.ps1 -Run  # build + install on connected TV
+# Shared web app (index.html + css/ + js/, including mpegts.js + the local seed.js).
+Copy-Item (Join-Path $root 'webos_native\index.html') $stage
+Copy-Item (Join-Path $root 'webos_native\css') (Join-Path $stage 'css') -Recurse
+Copy-Item (Join-Path $root 'webos_native\js')  (Join-Path $stage 'js')  -Recurse
+# Tizen project files.
+Copy-Item (Join-Path $root 'tizen_native\config.xml') $stage
+Copy-Item (Join-Path $root 'tizen_native\icon.png')   $stage
+Write-Host "Staged Tizen project at: $stage"
+Write-Host "NOTE: for a STORE build, delete js\seed.js (it bakes in test credentials)."
 
-.PARAMETER Run
-    After building, deploy and run on the connected TV.
-
-.PARAMETER TizenIp
-    IP address of your Samsung TV (needed with -Run).
-#>
-param(
-    [switch] $Run,
-    [string] $TizenIp = ''
-)
-
-Set-StrictMode -Version Latest
-$ErrorActionPreference = 'Stop'
-
-$scriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
-$projectDir = Split-Path -Parent $scriptDir
-
-# Locate flutter-tizen
-$flutterTizen = $null
-$cmd = Get-Command flutter-tizen -ErrorAction SilentlyContinue
-if ($cmd) { $flutterTizen = $cmd.Source }
-if (-not $flutterTizen) {
-    Write-Error @'
-flutter-tizen not found on PATH.
-
-Install it:
-  https://github.com/flutter-tizen/flutter-tizen/blob/master/doc/install-tizen-sdk.md
-
-Then add to PATH and retry.
-'@
-    exit 1
+$tizen = Get-Command tizen -ErrorAction SilentlyContinue
+if (-not $tizen) {
+  Write-Host ""
+  Write-Host "'tizen' CLI not found. Either:"
+  Write-Host "  - add <TizenStudio>\tools\ide\bin to PATH and re-run, or"
+  Write-Host "  - in Tizen Studio: File > Import > Tizen Project > select build\tizen,"
+  Write-Host "    then Run As > Tizen Web Application (or right-click > Build Signed Package)."
+  exit 0
 }
-
-Write-Host "Using flutter-tizen: $flutterTizen" -ForegroundColor Cyan
-Write-Host "Project: $projectDir" -ForegroundColor Cyan
-
-# pub get
-Write-Host ''
-Write-Host '-- flutter-tizen pub get --' -ForegroundColor Yellow
-Push-Location $projectDir
-& $flutterTizen pub get
-if ($LASTEXITCODE -ne 0) { Write-Error 'pub get failed'; exit 1 }
-
-# build
-Write-Host ''
-Write-Host '-- flutter-tizen build tpk --release --' -ForegroundColor Yellow
-& $flutterTizen build tpk --release
-if ($LASTEXITCODE -ne 0) { Write-Error 'tpk build failed'; exit 1 }
-
-$tpkPath = Join-Path $projectDir 'build\tizen\wisetv-1.0.0.tpk'
-if (Test-Path $tpkPath) {
-    $sizeKb = [math]::Round((Get-Item $tpkPath).Length / 1KB)
-    Write-Host ''
-    Write-Host "== Build complete ==" -ForegroundColor Green
-    Write-Host "  $tpkPath  ($sizeKb KB)" -ForegroundColor White
-} else {
-    Write-Warning 'TPK file not found at expected path — check build output above.'
-}
-
-# optional: run on TV
-if ($Run) {
-    if (-not $TizenIp) {
-        Write-Error 'Specify -TizenIp <TV-IP> to deploy.'
-        exit 1
-    }
-    Write-Host ''
-    Write-Host "-- Deploying to TV at $TizenIp --" -ForegroundColor Yellow
-    & $flutterTizen run --device-id $TizenIp
-}
-
-Pop-Location
-
-Write-Host ''
-Write-Host 'Sideload manually:' -ForegroundColor Yellow
-Write-Host '  1. Connect Tizen Studio to your TV (Device Manager → Add → IP)' -ForegroundColor White
-Write-Host "  2. Right-click the TV → Install App → select the .tpk above" -ForegroundColor White
+& tizen build-web -- $stage
+& tizen package -t wgt -s $SecProfile -- (Join-Path $stage '.buildResult')
+Get-ChildItem (Join-Path $stage '.buildResult\*.wgt') -ErrorAction SilentlyContinue |
+  Select-Object FullName, @{N='KB';E={[math]::Round($_.Length/1KB)}}

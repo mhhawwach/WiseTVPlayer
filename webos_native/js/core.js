@@ -4,6 +4,24 @@
   'use strict';
   var W = (window.W = window.W || {});
 
+  // ── Platform detection (one codebase serves LG webOS + Samsung Tizen) ───────
+  W.platform = (function () {
+    var ua = navigator.userAgent || '';
+    if (window.tizen || /Tizen/i.test(ua)) return 'tizen';
+    if (window.webOS || window.PalmSystem || /Web0S|webOS/i.test(ua)) return 'webos';
+    return 'web';
+  })();
+
+  // Tizen only delivers the colour / media / back keys to the app if they are
+  // explicitly registered. (webOS sends them unconditionally.)
+  if (W.platform === 'tizen' && window.tizen && window.tizen.tvinputdevice) {
+    ['ColorF0Red', 'ColorF1Green', 'ColorF2Yellow', 'ColorF3Blue',
+      'MediaPlayPause', 'MediaPlay', 'MediaPause', 'MediaStop',
+      'MediaRewind', 'MediaFastForward'].forEach(function (k) {
+      try { window.tizen.tvinputdevice.registerKey(k); } catch (e) {}
+    });
+  }
+
   // ── DOM helpers ────────────────────────────────────────────────────────────
   function el(tag, props, kids) {
     var e = document.createElement(tag);
@@ -283,15 +301,18 @@
 
     if (isTyping()) {
       // Let the on-screen keyboard handle typing; Back/OK leave the field.
-      if (k === 461 || k === 27 || k === 13) { document.activeElement.blur(); e.preventDefault(); }
+      if (k === 461 || k === 10009 || k === 27 || k === 13) { document.activeElement.blur(); e.preventDefault(); }
       return;
     }
+    // Tizen's Back (RETURN = 10009) does NOT auto-history.back like webOS, so we
+    // route it through history ourselves → popstate → screen pop / root exit.
+    if (k === 10009) { try { history.back(); } catch (x) { Router._pop(); } e.preventDefault(); return; }
     if (k === 37) { Nav.move('left'); e.preventDefault(); }
     else if (k === 38) { Nav.move('up'); e.preventDefault(); }
     else if (k === 39) { Nav.move('right'); e.preventDefault(); }
     else if (k === 40) { Nav.move('down'); e.preventDefault(); }
     else if (k === 13) { Nav.activate(); e.preventDefault(); }
-    // NOTE: Back (461) is intentionally NOT handled here — webOS performs
+    // NOTE: webOS Back (461) is intentionally NOT handled here — webOS performs
     // history.back() on Back, which our popstate handler turns into a screen pop.
   });
 
