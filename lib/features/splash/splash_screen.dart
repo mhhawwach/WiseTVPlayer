@@ -79,9 +79,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     context.go(destination);
 
     // Update check — non-blocking; shows over whatever screen is current.
-    // Skipped on web: the in-app updater points at the Android APK, which is
-    // irrelevant on webOS (that build is sideloaded as an IPK, not auto-updated).
-    if (!kIsWeb) {
+    // ANDROID ONLY: the in-app updater downloads the GitHub APK. That's wrong on
+    // iOS (App Store handles updates), on web, and on webOS/Windows. Guard it so
+    // it only runs where an APK can actually be installed.
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
       UpdateService.instance
           .checkForUpdate()
           .timeout(const Duration(seconds: 8), onTimeout: () => null)
