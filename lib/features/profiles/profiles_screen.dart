@@ -35,20 +35,28 @@ class _ProfilesScreenState extends ConsumerState<ProfilesScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           // ── Profile cards ────────────────────────────────────────────────
-          ...profiles.map((p) => _ProfileCard(
-                profile:  p,
-                isActive: p.id == activeId,
-                onSwitch: () async {
-                  if (p.id == activeId) return;
-                  await ref.read(profileProvider.notifier).switchProfile(p.id);
-                  ref.read(categoryPrefsProvider.notifier).reload();
-                  if (context.mounted) context.go('/home');
-                },
-                onEdit: () => _showEditDialog(context, ref, s, p),
-                onDelete: profiles.length > 1
-                    ? () => _confirmDelete(context, ref, s, p)
-                    : null,
-              )),
+          ...profiles.asMap().entries.map((entry) {
+            final i = entry.key;
+            final p = entry.value;
+            return _ProfileCard(
+              profile:  p,
+              isActive: p.id == activeId,
+              // Only ONE card autofocuses (the first). Autofocusing every
+              // non-active card put multiple autofocus:true in one scope, so
+              // the initial highlight landed unpredictably / looked missing.
+              autofocus: i == 0,
+              onSwitch: () async {
+                if (p.id == activeId) return;
+                await ref.read(profileProvider.notifier).switchProfile(p.id);
+                ref.read(categoryPrefsProvider.notifier).reload();
+                if (context.mounted) context.go('/home');
+              },
+              onEdit: () => _showEditDialog(context, ref, s, p),
+              onDelete: profiles.length > 1
+                  ? () => _confirmDelete(context, ref, s, p)
+                  : null,
+            );
+          }),
 
           const SizedBox(height: 12),
 
@@ -170,6 +178,7 @@ class _ProfileCard extends StatelessWidget {
   const _ProfileCard({
     required this.profile,
     required this.isActive,
+    required this.autofocus,
     required this.onSwitch,
     required this.onEdit,
     this.onDelete,
@@ -177,6 +186,7 @@ class _ProfileCard extends StatelessWidget {
 
   final Profile     profile;
   final bool        isActive;
+  final bool        autofocus;
   final VoidCallback onSwitch;
   final VoidCallback onEdit;
   final VoidCallback? onDelete;
@@ -202,7 +212,7 @@ class _ProfileCard extends StatelessWidget {
       child: ListTile(
         // The whole row switches profile (easy D-pad OK target on TV).
         onTap: isActive ? null : onSwitch,
-        autofocus: !isActive,
+        autofocus: autofocus,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         leading: _Avatar(profile: profile, size: 44),

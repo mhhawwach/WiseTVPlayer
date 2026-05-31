@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/storage/storage_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/channel_logo.dart';
+import '../../core/widgets/focusable_card.dart';
 import '../../data/models/live_stream.dart';
 import '../../data/models/vod_stream.dart';
 import '../../features/player/live_player_screen.dart';
@@ -116,8 +117,9 @@ class _HistoryCard extends StatelessWidget {
 
     final cardW = type == 'live' ? 120.0 : 90.0;
 
-    return GestureDetector(
-      onTap: () => _onTap(context),
+    return FocusableCard(
+      onPressed: () => _onTap(context),
+      borderRadius: 10,
       child: Container(
         width: cardW,
         margin: const EdgeInsets.only(right: 8),

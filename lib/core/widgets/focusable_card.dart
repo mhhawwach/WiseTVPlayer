@@ -33,17 +33,28 @@ class FocusableCard extends StatefulWidget {
   State<FocusableCard> createState() => _FocusableCardState();
 }
 
-class _FocusableCardState extends State<FocusableCard> {
+class _FocusableCardState extends State<FocusableCard>
+    with AutomaticKeepAliveClientMixin {
   bool _focused = false;
   bool _hovered = false;
 
+  // Keep the focused card alive even if it scrolls out of a lazy list/grid, so
+  // focus is never lost by the item being disposed out from under it (the main
+  // cause of the "highlight fades, press many times to get it back" symptom).
+  @override
+  bool get wantKeepAlive => _focused;
+
   @override
   Widget build(BuildContext context) {
+    super.build(context); // required by AutomaticKeepAliveClientMixin
     return Focus(
       focusNode: widget.focusNode,
       autofocus: widget.autofocus,
       onFocusChange: (f) {
-        if (mounted) setState(() => _focused = f);
+        if (mounted) {
+          setState(() => _focused = f);
+          updateKeepAlive();
+        }
         // Auto-scroll the focused item into view so D-pad navigation through
         // long rows / grids always keeps the selection on screen (TV remotes).
         if (f && Scrollable.maybeOf(context) != null) {

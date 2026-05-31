@@ -937,11 +937,16 @@ class _CategoryRailItem extends StatefulWidget {
   State<_CategoryRailItem> createState() => _CategoryRailItemState();
 }
 
-class _CategoryRailItemState extends State<_CategoryRailItem> {
+class _CategoryRailItemState extends State<_CategoryRailItem>
+    with AutomaticKeepAliveClientMixin {
   bool _focused = false;
 
   @override
+  bool get wantKeepAlive => _focused;
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context); // keep the focused category alive in the lazy list
     final active = widget.selected;
     return Semantics(
       button: true,
@@ -952,6 +957,7 @@ class _CategoryRailItemState extends State<_CategoryRailItem> {
         autofocus: widget.autofocus,
         onFocusChange: (f) {
           setState(() => _focused = f);
+          updateKeepAlive();
           // Live-preview the channels as the user arrows through categories.
           if (f) widget.onSelected();
         },

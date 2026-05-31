@@ -168,6 +168,9 @@ class _TrackList extends StatelessWidget {
       );
     }
 
+    // Seed focus on the currently-selected track (or the first one) so the
+    // sheet opens with a visible highlight on a TV instead of nothing focused.
+    final hasSelection = tracks.any((t) => t.id == selectedId);
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: tracks.length,
@@ -175,6 +178,7 @@ class _TrackList extends StatelessWidget {
         final track = tracks[i];
         final selected = track.id == selectedId;
         return ListTile(
+          autofocus: selected || (!hasSelection && i == 0),
           leading: Icon(
             selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
             color: selected ? AppColors.primary : AppColors.textMuted,

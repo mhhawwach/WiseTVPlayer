@@ -9,6 +9,7 @@ import 'core/providers/wallpaper_provider.dart';
 import 'core/providers/theme_provider.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'core/widgets/focus_recovery.dart';
 
 class WiseTVPlayerApp extends ConsumerWidget {
   const WiseTVPlayerApp({super.key});
@@ -69,6 +70,9 @@ class WiseTVPlayerApp extends ConsumerWidget {
             ],
           );
         }
+        // Recover D-pad focus if it's ever lost (TV only) so the highlight
+        // never just disappears requiring blind presses to get it back.
+        result = FocusRecovery(child: result);
         // NOTE: hardware-Back interception is done at the shell-route level
         // (see HomeShell) — a handler here, above go_router's Router, never
         // sees the event because the Router consumes it first.

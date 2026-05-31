@@ -203,14 +203,24 @@ class _TVShellState extends State<_TVShell> {
   }
 
   void _focusContent() {
-    // requestFocus() on the scope alone does NOT reliably descend into the
-    // page's nested Navigator focus scope, so target the first concrete
-    // focusable node inside the content (requestFocus on a node works across
-    // scopes). If the page is still loading (no focusables yet), no-op.
+    if (_tryFocusContent()) return;
+    // The page may still be building its first focusables (async content load)
+    // — retry once after the frame so Right reliably enters the content instead
+    // of feeling dead.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _tryFocusContent();
+    });
+  }
+
+  // Focuses the first concrete focusable inside the content scope. requestFocus
+  // on the scope alone does NOT reliably descend into the page's nested
+  // Navigator focus scope, so we target a node directly (works across scopes).
+  bool _tryFocusContent() {
     for (final node in _contentScope.traversalDescendants) {
       node.requestFocus();
-      return;
+      return true;
     }
+    return false;
   }
 
   // Bridges content → rail. Returns true (handled) for Left so we control the
@@ -426,23 +436,23 @@ class _TVRailItemState extends State<_TVRailItem> {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
           decoration: BoxDecoration(
             color: _focused
-                ? AppColors.primary.withValues(alpha: 0.22)
+                ? AppColors.focus.withValues(alpha: 0.22)
                 : widget.selected
                     ? AppColors.primary.withValues(alpha: 0.14)
                     : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
             border: _focused
-                ? Border.all(color: AppColors.primary, width: 2.5)
+                ? Border.all(color: AppColors.focus, width: 2.5)
                 : widget.selected
                     ? Border.all(
                         color: AppColors.primary.withValues(alpha: 0.3),
                         width: 1)
                     : null,
-            // Strong glow so the focused item is unmistakable on a TV.
+            // Bright cyan glow so the focused item is unmistakable on a TV.
             boxShadow: _focused
                 ? [
                     BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.5),
+                        color: AppColors.focus.withValues(alpha: 0.55),
                         blurRadius: 12,
                         spreadRadius: 1)
                   ]
@@ -540,13 +550,15 @@ class _ProfileRailButtonState extends ConsumerState<_ProfileRailButton> {
             padding: EdgeInsets.symmetric(
                 horizontal: widget.expanded ? 10 : 6, vertical: 8),
             decoration: BoxDecoration(
-              color: AppColors.primary
-                  .withValues(alpha: _focused ? 0.18 : 0.07),
+              color: _focused
+                  ? AppColors.focus.withValues(alpha: 0.20)
+                  : AppColors.primary.withValues(alpha: 0.07),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: AppColors.primary
-                    .withValues(alpha: _focused ? 0.7 : 0.18),
-                width: _focused ? 1.5 : 1,
+                color: _focused
+                    ? AppColors.focus
+                    : AppColors.primary.withValues(alpha: 0.18),
+                width: _focused ? 2.0 : 1,
               ),
             ),
             child: widget.expanded
