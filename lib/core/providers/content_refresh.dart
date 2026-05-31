@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../language/language_prefs.dart';
 import '../../features/epg/epg_panel.dart';
 import '../../features/live_tv/live_categories_screen.dart';
 import '../../features/live_tv/live_channels_screen.dart';
@@ -37,4 +38,7 @@ void invalidateAllContent(WidgetRef ref) {
   // EPG + account
   ref.invalidate(epgProvider);
   ref.invalidate(accountInfoProvider);
+  // Re-read the content-language selection for the (now-active) playlist, so
+  // the filter matches the new endpoint instead of the previous one.
+  ref.read(languagePrefsProvider.notifier).reload();
 }

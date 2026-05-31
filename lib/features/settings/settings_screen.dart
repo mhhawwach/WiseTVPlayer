@@ -14,6 +14,7 @@ import '../../core/storage/storage_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/content_cache_service.dart';
 import '../../core/widgets/focusable_card.dart';
+import '../../features/onboarding/language_prefs_dialog.dart';
 import '../../features/profiles/profiles_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -112,6 +113,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.go('/settings/categories'),
+          ),
+          // Re-open the "Customize your experience" language popup for the
+          // active playlist (also fires automatically on first launch).
+          ListTile(
+            leading: const Icon(Icons.translate_rounded),
+            title: const Text('Content languages'),
+            subtitle: const Text(
+                'Choose which languages to show across Live TV, Movies & Series',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () async {
+              final ok =
+                  await openLanguagePrefsForActivePlaylist(context, ref);
+              if (!ok && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content: Text(
+                      'Select a playlist with categories to customize languages.'),
+                ));
+              }
+            },
           ),
           const Divider(),
 
@@ -767,9 +788,17 @@ class _PerformanceSectionState extends State<_PerformanceSection> {
 
   @override
   Widget build(BuildContext context) {
-    final tierLabel = Perf.tier == PerfTier.high ? 'High' : 'Low';
-    final autoLabel = Perf.autoDetectedLowEnd ? 'low-end' : 'high-end';
-    final renderer = Perf.tier == PerfTier.high ? 'Impeller' : 'Skia';
+    final tierLabel = switch (Perf.tier) {
+      PerfTier.ultra => 'Ultra',
+      PerfTier.high => 'High',
+      PerfTier.low => 'Low',
+    };
+    final autoLabel = switch (Perf.tier) {
+      PerfTier.ultra => 'desktop',
+      PerfTier.high => 'high-end',
+      PerfTier.low => 'low-end',
+    };
+    final renderer = Perf.tier == PerfTier.low ? 'Skia' : 'Impeller';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -793,6 +822,7 @@ class _PerformanceSectionState extends State<_PerformanceSection> {
               DropdownMenuItem(value: PerfMode.auto, child: Text('Auto')),
               DropdownMenuItem(value: PerfMode.low, child: Text('Low')),
               DropdownMenuItem(value: PerfMode.high, child: Text('High')),
+              DropdownMenuItem(value: PerfMode.ultra, child: Text('Ultra')),
             ],
             onChanged: (v) {
               if (v != null) _setMode(v);

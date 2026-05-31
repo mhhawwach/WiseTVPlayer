@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 /// Updates the iOS Control Center / Lock Screen "Now Playing" widget.
@@ -20,7 +20,7 @@ class NowPlayingService {
     String subtitle = '',
     String? artwork,
   }) async {
-    if (!Platform.isIOS) return;
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return;
     try {
       await _channel.invokeMethod<void>('update', {
         'title': title,
@@ -34,7 +34,7 @@ class NowPlayingService {
 
   /// Clear the now-playing info (e.g. when playback stops).
   Future<void> clear() async {
-    if (!Platform.isIOS) return;
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return;
     try {
       await _channel.invokeMethod<void>('clear');
     } catch (_) {}

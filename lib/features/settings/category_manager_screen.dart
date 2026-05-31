@@ -98,8 +98,13 @@ class _CatManagerTab extends ConsumerWidget {
         final ordered = _applyOrder(cats, section);
         return ReorderableListView.builder(
           padding: const EdgeInsets.symmetric(vertical: 8),
-          onReorderItem: (oldIdx, newIdx) =>
-              _reorder(ref, ordered, oldIdx, newIdx),
+          // Use the classic onReorder (exists in both Flutter 3.27 and 3.44;
+          // onReorderItem is 3.44-only). onReorder does NOT pre-adjust newIndex,
+          // so correct it here when moving an item downward.
+          onReorder: (oldIdx, newIdx) {
+            if (newIdx > oldIdx) newIdx -= 1;
+            _reorder(ref, ordered, oldIdx, newIdx);
+          },
           itemCount: ordered.length,
           itemBuilder: (_, i) {
             final cat = ordered[i];

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/l10n/app_strings.dart';
+import '../../core/language/language_prefs.dart';
 import '../../core/storage/storage_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/image_cache_manager.dart';
@@ -12,8 +13,10 @@ import '../../core/utils/rating.dart';
 import '../../core/utils/year_parser.dart';
 import '../../core/widgets/focusable_card.dart';
 import '../../core/widgets/loading_grid.dart';
+import '../../data/models/live_category.dart';
 import '../../data/models/series_stream.dart';
 import '../../services/xtream_service.dart';
+import 'series_categories_screen.dart' show seriesCategoriesProvider;
 
 // ── Sort mode ─────────────────────────────────────────────────────────────────
 
@@ -57,13 +60,20 @@ class _SeriesListScreenState extends ConsumerState<SeriesListScreen> {
         _SortMode.byYear        => s.sortByYear,
       };
 
-  List<SeriesStream> _process(List<SeriesStream> allSeries) {
+  List<SeriesStream> _process(
+      List<SeriesStream> allSeries, Set<String> langBlocked) {
     // Step 1 — category filter (client-side, instant)
     var list = widget.categoryId == AppConstants.catAllId
         ? allSeries
         : allSeries
             .where((s) => s.categoryId == widget.categoryId)
             .toList();
+
+    // Step 1b — language filter (no-op inside a single allowed category; only
+    // bites in the "All Series" view).
+    if (langBlocked.isNotEmpty) {
+      list = list.where((s) => !langBlocked.contains(s.categoryId)).toList();
+    }
 
     // Step 2 — search filter
     if (_search.isNotEmpty) {
@@ -105,6 +115,10 @@ class _SeriesListScreenState extends ConsumerState<SeriesListScreen> {
   Widget build(BuildContext context) {
     final s     = ref.watch(stringsProvider);
     final async = ref.watch(allSeriesProvider);
+    final langPrefs = ref.watch(languagePrefsProvider);
+    final seriesCats =
+        ref.watch(seriesCategoriesProvider).value ?? const <LiveCategory>[];
+    final langBlocked = blockedCategoryIdsFor(seriesCats, langPrefs);
 
     return Scaffold(
       appBar: AppBar(
@@ -154,7 +168,7 @@ class _SeriesListScreenState extends ConsumerState<SeriesListScreen> {
             child: Text(e.toString(),
                 style: const TextStyle(color: AppColors.textSecondary))),
         data: (seriesList) {
-          final filtered = _process(seriesList);
+          final filtered = _process(seriesList, langBlocked);
           if (filtered.isEmpty) {
             return Center(
               child: Text(s.noSeriesFound,

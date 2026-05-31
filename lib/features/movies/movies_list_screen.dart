@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/l10n/app_strings.dart';
+import '../../core/language/language_prefs.dart';
 import '../../core/storage/storage_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/image_cache_manager.dart';
@@ -12,8 +13,10 @@ import '../../core/utils/rating.dart';
 import '../../core/utils/year_parser.dart';
 import '../../core/widgets/focusable_card.dart';
 import '../../core/widgets/loading_grid.dart';
+import '../../data/models/live_category.dart';
 import '../../data/models/vod_stream.dart';
 import '../../services/xtream_service.dart';
+import 'movies_categories_screen.dart' show vodCategoriesProvider;
 
 // ── Sort mode ─────────────────────────────────────────────────────────────────
 
@@ -60,13 +63,20 @@ class _MoviesListScreenState extends ConsumerState<MoviesListScreen> {
         _SortMode.byYear        => s.sortByYear,
       };
 
-  List<VodStream> _process(List<VodStream> allMovies) {
+  List<VodStream> _process(List<VodStream> allMovies, Set<String> langBlocked) {
     // Step 1 — category filter (client-side, instant)
     var list = widget.categoryId == AppConstants.catAllId
         ? allMovies
         : allMovies
             .where((m) => m.categoryId == widget.categoryId)
             .toList();
+
+    // Step 1b — language filter. Drops movies whose category is in an
+    // unselected language. A no-op when viewing one (already-allowed) category;
+    // only bites in the "All Movies" view.
+    if (langBlocked.isNotEmpty) {
+      list = list.where((m) => !langBlocked.contains(m.categoryId)).toList();
+    }
 
     // Step 2 — search filter
     if (_search.isNotEmpty) {
@@ -108,6 +118,10 @@ class _MoviesListScreenState extends ConsumerState<MoviesListScreen> {
   Widget build(BuildContext context) {
     final s     = ref.watch(stringsProvider);
     final async = ref.watch(allVodStreamsProvider);
+    final langPrefs = ref.watch(languagePrefsProvider);
+    final vodCats =
+        ref.watch(vodCategoriesProvider).value ?? const <LiveCategory>[];
+    final langBlocked = blockedCategoryIdsFor(vodCats, langPrefs);
 
     return Scaffold(
       appBar: AppBar(
@@ -157,7 +171,7 @@ class _MoviesListScreenState extends ConsumerState<MoviesListScreen> {
             child: Text(e.toString(),
                 style: const TextStyle(color: AppColors.textSecondary))),
         data: (movies) {
-          final filtered = _process(movies);
+          final filtered = _process(movies, langBlocked);
           if (filtered.isEmpty) {
             return Center(
               child: Text(s.noMoviesFound,

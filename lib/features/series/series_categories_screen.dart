@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/language/language_prefs.dart';
 import '../../core/storage/category_prefs_notifier.dart';
 import '../../core/storage/storage_service.dart';
 import '../../core/widgets/category_grid.dart';
@@ -33,6 +34,7 @@ class SeriesCategoriesScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(seriesCategoriesProvider);
     final prefs = ref.watch(categoryPrefsProvider);
+    final langPrefs = ref.watch(languagePrefsProvider);
     // Prefetch the full series list while the user browses categories.
     ref.watch(allSeriesProvider);
 
@@ -44,7 +46,9 @@ class SeriesCategoriesScreen extends ConsumerWidget {
             message: e.toString(),
             onRetry: () => ref.invalidate(seriesCategoriesProvider)),
         data: (cats) {
-          final visible = applyOrderAndFilter(cats, prefs, 'series');
+          final blocked = blockedCategoryIdsFor(cats, langPrefs);
+          final visible = applyOrderAndFilter(cats, prefs, 'series',
+              langBlocked: blocked);
           final withAll = [_allCategory, ...visible];
 
           return CategoryGrid(

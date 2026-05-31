@@ -17,9 +17,13 @@ import 'focusable_card.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 
 List<LiveCategory> applyOrderAndFilter(
-    List<LiveCategory> cats, CategoryPrefs prefs, String section) {
-  final visible =
-      cats.where((c) => !prefs.hidden.contains(c.categoryId)).toList();
+    List<LiveCategory> cats, CategoryPrefs prefs, String section,
+    {Set<String> langBlocked = const {}}) {
+  final visible = cats
+      .where((c) =>
+          !prefs.hidden.contains(c.categoryId) &&
+          !langBlocked.contains(c.categoryId))
+      .toList();
   final order = StorageService.getCategoryOrder(section);
   if (order.isEmpty) return visible;
   final map = {for (final c in visible) c.categoryId: c};

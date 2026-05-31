@@ -347,4 +347,36 @@ class StorageService {
   static Future<void> setCategoryOrder(String section, List<String> ids) async {
     await _settingsBox.put('${_p}cat_order_$section', ids);
   }
+
+  // ─── Content-language preferences (per profile + per playlist) ─────────────
+  // The "Customize your experience" popup stores the languages a profile wants
+  // for a given playlist. Scoped by both profile (via _p) AND playlist id, so
+  // switching either gives an independent selection. `seen` gates the one-time
+  // first-launch popup.
+
+  static String _langSelKey(String playlistId) => 'lang_sel_$playlistId';
+  static String _langSeenKey(String playlistId) => 'lang_seen_$playlistId';
+
+  /// The stored language selection for [playlistId], or `null` if the user has
+  /// never chosen (callers then apply the auto-detected default).
+  static Set<String>? selectedLanguages(String playlistId) {
+    final v = getSetting<List>(_langSelKey(playlistId));
+    return v == null ? null : Set<String>.from(v.map((e) => e.toString()));
+  }
+
+  /// Persist the language selection for [playlistId] and mark the popup seen.
+  static Future<void> setSelectedLanguages(
+      String playlistId, Set<String> langs) async {
+    await setSetting(_langSelKey(playlistId), langs.toList());
+    await setSetting(_langSeenKey(playlistId), true);
+  }
+
+  /// Whether the first-launch language popup has already run for [playlistId].
+  static bool languagePrefsSeen(String playlistId) =>
+      getSetting<bool>(_langSeenKey(playlistId)) ?? false;
+
+  /// Mark the popup as seen without changing the selection (used when a
+  /// playlist has no language-tagged categories — nothing to customize).
+  static Future<void> markLanguagePrefsSeen(String playlistId) async =>
+      setSetting(_langSeenKey(playlistId), true);
 }

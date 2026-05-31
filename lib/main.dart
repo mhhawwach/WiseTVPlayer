@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -59,6 +60,13 @@ Future<void> _bootstrap() async {
   // it's ready the cache reports "miss" and content loads from the network.
   // media_kit / wakelock are only needed once playback starts.
   unawaited(ContentCacheService.init());
-  MediaKit.ensureInitialized();
-  WakelockPlus.enable();
+
+  // Native-only init. On web (LG webOS) the player is WebPlayerImpl (HTML5
+  // <video>), not media_kit, so skip the libmpv init entirely — it would be
+  // dead weight on the already-tight webOS cold-start budget. Wakelock uses
+  // the Screen Wake Lock API which isn't present on old webOS Chromium.
+  if (!kIsWeb) {
+    MediaKit.ensureInitialized();
+    WakelockPlus.enable();
+  }
 }

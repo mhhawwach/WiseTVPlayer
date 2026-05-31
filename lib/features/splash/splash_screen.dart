@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/perf/perf_profile.dart';
 import '../../core/storage/storage_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/device_utils.dart';
@@ -32,8 +34,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     _ctrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 2600));
     _glowCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1500))
-      ..repeat(reverse: true);
+        vsync: this, duration: const Duration(milliseconds: 1500));
 
     _logoScale = Tween<double>(begin: 0.65, end: 1.0).animate(
       CurvedAnimation(
@@ -48,40 +49,46 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
           parent: _ctrl, curve: const Interval(0.45, 0.9, curve: Curves.easeOutCubic)),
     );
 
-    _ctrl.forward();
+    // On low-tier TVs (webOS/Tizen), skip ALL splash animation — continuous
+    // repaints (intro tween, pulsing glow, spinner) starve the weak renderer.
+    if (Perf.reduceMotion) {
+      _ctrl.value = 1.0; // jump to final state; build() renders a static splash
+    } else {
+      _glowCtrl.repeat(reverse: true);
+      _ctrl.forward();
+    }
     _navigate();
   }
 
   Future<void> _navigate() async {
-    // Hold the splash for ~3 s while warmup + update check run in parallel.
-    UpdateInfo? updateInfo;
-    await Future.wait([
-      Future.delayed(const Duration(milliseconds: 3000)),
-      DeviceUtils.warmup(),
-      UpdateService.instance
-          .checkForUpdate()
-          .then((info) => updateInfo = info)
-          .catchError((_) => null),
-    ]);
-
+    // Navigate as soon as warmup is done. The update check runs AFTER navigation
+    // so it can NEVER block startup (dio's web timeouts are unreliable and
+    // PackageInfo fetches version.json — both can hang on the TV's file:// Chrome
+    // 79). On low-tier TVs the brand hold is minimal: the renderer warmup
+    // already elapsed on the HTML boot screen — don't pile on more wait.
+    await DeviceUtils.warmup()
+        .timeout(const Duration(seconds: 3), onTimeout: () {});
+    await Future.delayed(Perf.reduceMotion
+        ? const Duration(milliseconds: 400)
+        : const Duration(milliseconds: 3000));
     if (!mounted) return;
 
     final hasPlaylists = StorageService.playlists.isNotEmpty;
     // After splash, pick a profile ("Who's watching?") before the menu.
     final destination = hasPlaylists ? '/profiles/select' : '/playlists';
+    context.go(destination);
 
-    if (updateInfo != null) {
-      if (updateInfo!.required) {
-        await showUpdateDialog(context, updateInfo!);
-      } else {
-        context.go(destination);
-        await Future.delayed(const Duration(milliseconds: 600));
-        if (mounted) showUpdateDialog(context, updateInfo!);
-        return;
-      }
+    // Update check — non-blocking; shows over whatever screen is current.
+    // Skipped on web: the in-app updater points at the Android APK, which is
+    // irrelevant on webOS (that build is sideloaded as an IPK, not auto-updated).
+    if (!kIsWeb) {
+      UpdateService.instance
+          .checkForUpdate()
+          .timeout(const Duration(seconds: 8), onTimeout: () => null)
+          .then((info) {
+        if (info != null && mounted) showUpdateDialog(context, info);
+      }).catchError((_) {});
     }
-
-    if (mounted) context.go(destination);
   }
 
   @override
@@ -91,8 +98,55 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     super.dispose();
   }
 
+  // Static, zero-animation splash for low-tier TVs (no glow pulse, no intro
+  // tween, no spinner) — those continuous repaints starve CanvasKit on the weak
+  // webOS/Tizen renderer. Shows the same brand, just still.
+  Widget _buildStatic() {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClapperLogo(size: 116, animate: false),
+            SizedBox(height: 28),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('WiseVod',
+                    style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 32,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.5)),
+                Text('Player',
+                    style: TextStyle(
+                        color: AppColors.primary,
+                        fontSize: 32,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.5)),
+              ],
+            ),
+            SizedBox(height: 10),
+            Text('STREAM EVERYTHING',
+                style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 3.0)),
+            SizedBox(height: 30),
+            Text('Loading…',
+                style:
+                    TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (Perf.reduceMotion) return _buildStatic();
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Stack(

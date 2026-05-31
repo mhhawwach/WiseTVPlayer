@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../core/perf/perf_profile.dart';
 import 'app_player.dart';
 import 'media_kit_player_impl.dart';
 
@@ -32,8 +33,12 @@ export 'app_player.dart';
 class PlayerFactory {
   PlayerFactory._();
 
-  /// Default buffer: 32 MB (VOD). Pass 8 MB for live TV for faster zapping.
-  static AppPlayer create({int bufferSize = 32 * 1024 * 1024}) {
+  /// [bufferSize] defaults to the active perf tier's budget
+  /// ([Perf.mediaBufferBytes]) — Ultra (desktop) gets a large buffer for instant
+  /// seeks/zapping; low-tier TVs get a lean one. Callers may still pass an
+  /// explicit size (e.g. a smaller one for low-latency live).
+  static AppPlayer create({int? bufferSize}) {
+    final buf = bufferSize ?? Perf.mediaBufferBytes;
     if (kIsWeb) {
       // LG WebOS or any Flutter Web target.
       // Resolves to web_player_impl.dart (HTML5 <video>) at compile time.
@@ -46,7 +51,7 @@ class PlayerFactory {
     }
 
     // Android, iOS, macOS, Windows, Linux — all use media_kit / libmpv.
-    return MediaKitPlayerImpl(bufferSize: bufferSize);
+    return MediaKitPlayerImpl(bufferSize: buf);
   }
 
   static bool get _isTizen {

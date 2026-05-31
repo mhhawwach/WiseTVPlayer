@@ -57,12 +57,16 @@ class _FocusableCardState extends State<FocusableCard>
         }
         // Auto-scroll the focused item into view so D-pad navigation through
         // long rows / grids always keeps the selection on screen (TV remotes).
+        // On the low tier (webOS HTML renderer) the scroll is instant — an
+        // animated scroll there is a stutter-fest in the DOM renderer.
         if (f && Scrollable.maybeOf(context) != null) {
           Scrollable.ensureVisible(
             context,
             alignment: 0.5,
             alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
-            duration: const Duration(milliseconds: 220),
+            duration: Perf.reduceMotion
+                ? Duration.zero
+                : const Duration(milliseconds: 220),
             curve: Curves.easeOutCubic,
           );
         }
@@ -78,8 +82,17 @@ class _FocusableCardState extends State<FocusableCard>
         return KeyEventResult.ignored;
       },
       child: MouseRegion(
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
+        // Hover highlighting is dropped on the low tier: on the webOS HTML
+        // renderer a magic-remote cursor sweep fires onEnter/onExit across every
+        // card, and each setState repaints a gradient/IntrinsicHeight card in the
+        // DOM — that was the "cursor is heavier than wasm" lag. Focus (D-pad /
+        // click) still drives the highlight; only ambient hover is suppressed.
+        onEnter: Perf.reduceMotion
+            ? null
+            : (_) => setState(() => _hovered = true),
+        onExit: Perf.reduceMotion
+            ? null
+            : (_) => setState(() => _hovered = false),
         child: GestureDetector(
           onTap: widget.onPressed,
           onLongPress: widget.onLongPress,

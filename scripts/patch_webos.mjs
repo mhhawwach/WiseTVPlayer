@@ -1,36 +1,60 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // patch_webos.mjs — make a Flutter `build/web` output runnable on LG webOS.
 //
-// Run AFTER `flutter build web --release` and BEFORE `ares-package`:
+// Run AFTER `flutter build web --release ...` and BEFORE `ares-package`:
 //     node scripts/patch_webos.mjs
 //
-// webOS apps load from file:// on an OLD Chromium (webOS 6.x = Chrome 79).
-// That breaks stock Flutter web in several ways; this script fixes each:
+// webOS apps load from file:// on an OLD Chromium (webOS 6.x = Chrome 79). That
+// breaks stock Flutter web; this script fixes it. It is RENDERER-AWARE:
 //
-//   1. SYNTAX: Flutter's loader + CanvasKit use ?. / ?? (Chrome 80+).
-//      → transpile all JS to chrome79 with esbuild.
-//   2. base href "/" → "./"  (app is loaded from a file path, not web root).
-//   3. ES-MODULE IMPORT over file:// is blocked → CanvasKit is loaded via
-//      dynamic import(). Rebuild canvaskit.js as a CLASSIC iife exposing a
-//      global, and patch the loader to inject it with <script> instead.
-//   4. fetch() over file:// fails → inject an XHR-backed fetch shim
-//      (for assets, manifests, fonts) and load the wasm via that shim.
-//   5. Force LOCAL CanvasKit (default pulls it from the gstatic CDN).
+//   • HTML renderer (Flutter ≤3.27, `--web-renderer html`) — DOM/CSS, no wasm.
+//     This is what we ship to webOS (the α5-Gen4 TV can't drive CanvasKit). Only
+//     needs: transpile loader to chrome79, base href "./", file:// fetch shim,
+//     and the dead canvaskit/ assets removed.
+//   • CanvasKit renderer (Flutter 3.29+) — kept for reference/other targets. Adds:
+//     classic-iife canvaskit.js, force-local "full" variant, XHR-backed wasm.
 //
-// KNOWN REMAINING ISSUE: cold start is ~21s on a 2021 webOS TV (CanvasKit
-// wasm compile + 4MB main.dart.js parse). It DOES reach first frame
-// (diagnostics showed flutter-view attached at t+21s) but that's too slow to
-// ship. Next: cache the compiled wasm / trim startup. The HTML renderer would
-// avoid CanvasKit entirely but was removed in Flutter 3.29+ (we're on 3.44),
-// so the fallback plan is a separate web build on Flutter <=3.27 with
-// `--web-renderer html`.
+// Common gotchas handled:
+//   - Loader (flutter.js / flutter_bootstrap.js) uses ?./?? (Chrome 80+) → esbuild
+//     transpile to chrome79.
+//   - base href "/" → "./" (loaded from a file path, not web root).
+//   - fetch() over file:// fails → XHR-backed fetch shim (assets, fonts, manifests).
+//   - ⚠️ NEVER transpile main.dart.js: dart2js output has no ?./?? in executable
+//     code, and running it through esbuild corrupts dart2js's runtime type system
+//     (RTI) → every widget build throws "<type> is not a subtype" → grey screen.
+//
+// Robustness: every string replacement goes through `replaceOrThrow`, which FAILS
+// the build loudly if its pattern isn't found (so a Flutter upgrade can't silently
+// ship a broken IPK). Verified on Flutter 3.27.4 (html) and 3.44.0 (canvaskit).
 // ─────────────────────────────────────────────────────────────────────────────
 import { execSync } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 const WEB = join(process.cwd(), 'build', 'web');
 const ESBUILD = 'npx -y esbuild@0.24.0';
+
+if (!existsSync(WEB)) {
+  console.error(`patch_webos: ${WEB} not found. Run "flutter build web --release" first.`);
+  process.exit(1);
+}
+
+/** Replace exactly, asserting the pattern was present. Fails the build if not. */
+function replaceOrThrow(src, pattern, replacement, label) {
+  if (!pattern.test(src)) {
+    throw new Error(
+      `patch_webos: [${label}] pattern NOT found — Flutter's generated output ` +
+      `likely changed. Re-derive this regex against build/web (see header). ` +
+      `Pattern: ${pattern}`
+    );
+  }
+  const out = src.replace(pattern, replacement);
+  if (out === src) {
+    throw new Error(`patch_webos: [${label}] replacement was a no-op.`);
+  }
+  console.log(`  ✓ [${label}] applied`);
+  return out;
+}
 
 function esTranspile(rel) {
   const f = join(WEB, rel);
@@ -39,55 +63,64 @@ function esTranspile(rel) {
   console.log('  transpiled', rel);
 }
 
-// 1. Transpile loader + app JS to chrome79.
-for (const f of ['flutter.js', 'flutter_bootstrap.js', 'main.dart.js']) esTranspile(f);
+// ── Detect renderer from the generated buildConfig ────────────────────────────
+const bootstrapPath = join(WEB, 'flutter_bootstrap.js');
+const bootstrapRaw = readFileSync(bootstrapPath, 'utf8');
+const isHtmlRenderer = /"renderer"\s*:\s*"html"/.test(bootstrapRaw);
+console.log(`patch_webos: renderer = ${isHtmlRenderer ? 'HTML (DOM)' : 'CanvasKit'}`);
 
-// 3. Build CLASSIC (iife global) CanvasKit from the ESM module.
-{
-  const ck = join(WEB, 'canvaskit', 'canvaskit.js');
-  if (existsSync(ck)) {
-    // bundle the ESM into a global `flutterCanvasKitInit` ({ default: CanvasKitInit }).
-    execSync(`${ESBUILD} "${ck}" --bundle --format=iife --global-name=flutterCanvasKitInit --target=chrome79 --allow-overwrite --outfile="${ck}"`, { stdio: 'inherit' });
-    console.log('  built classic canvaskit.js (global flutterCanvasKitInit)');
+// 1. Transpile the LOADER ONLY to chrome79 (never main.dart.js — see header).
+for (const f of ['flutter.js', 'flutter_bootstrap.js']) esTranspile(f);
+
+if (isHtmlRenderer) {
+  // ── HTML build: no CanvasKit. Remove the dead canvaskit/ assets (~15 MB) so
+  //    they don't bloat the IPK; the html renderer never loads them. ───────────
+  const ckDir = join(WEB, 'canvaskit');
+  if (existsSync(ckDir)) {
+    rmSync(ckDir, { recursive: true, force: true });
+    console.log('  ✓ removed unused canvaskit/ (HTML renderer)');
   }
-  // chromium variant isn't used on Chrome 79 (needs Intl.Segmenter) but transpile defensively.
+} else {
+  // ── CanvasKit build: classic-iife canvaskit.js + force-local + XHR wasm. ─────
+  const ck = join(WEB, 'canvaskit', 'canvaskit.js');
+  if (!existsSync(ck)) throw new Error(`patch_webos: ${ck} not found — CanvasKit renderer expected.`);
+  execSync(`${ESBUILD} "${ck}" --bundle --format=iife --global-name=flutterCanvasKitInit --target=chrome79 --allow-overwrite --outfile="${ck}"`, { stdio: 'inherit' });
+  console.log('  built classic canvaskit.js (global flutterCanvasKitInit)');
   const ckc = join(WEB, 'canvaskit', 'chromium', 'canvaskit.js');
   if (existsSync(ckc)) execSync(`${ESBUILD} "${ckc}" --target=chrome79 --allow-overwrite --outfile="${ckc}"`, { stdio: 'inherit' });
-}
 
-// 5 + 3 + 4: patch flutter_bootstrap.js (force local CK, classic-script load, XHR wasm).
-{
-  const bp = join(WEB, 'flutter_bootstrap.js');
-  let s = readFileSync(bp, 'utf8');
-
-  // 5. Force local CanvasKit (else it loads from the gstatic CDN, untranspiled).
-  s = s.replace(
+  let s = readFileSync(bootstrapPath, 'utf8');
+  s = replaceOrThrow(
+    s,
     /_flutter\.loader\.load\(\{\s*serviceWorkerSettings:/,
-    '_flutter.loader.load({\n  config: { canvasKitBaseUrl: "canvaskit/" },\n  serviceWorkerSettings:'
+    '_flutter.loader.load({\n  config: { canvasKitBaseUrl: "canvaskit/", canvasKitVariant: "full" },\n  serviceWorkerSettings:',
+    'force-local-canvaskit'
   );
-
-  // 4. wasm via (shimmed) fetch -> arrayBuffer -> instantiate (no compileStreaming).
-  s = s.replace(
+  s = replaceOrThrow(
+    s,
     /let e = WebAssembly\.compileStreaming\(fetch\(i\)\);\s*return \(n, t\) => \(\(async \(\) => \{\s*let r = await e, a = await WebAssembly\.instantiate\(r, n\);\s*t\(a, r\);\s*\}\)\(\), \{\}\);/,
-    'return (n, t) => (window.fetch(i).then((R) => R.arrayBuffer()).then((buf) => WebAssembly.instantiate(buf, n)).then((res) => t(res.instance, res.module)), {});'
+    'return (n, t) => (window.fetch(i).then((R) => R.arrayBuffer()).then((buf) => WebAssembly.instantiate(buf, n)).then((res) => t(res.instance, res.module)), {});',
+    'xhr-wasm-instantiate'
   );
-
-  // 3. CanvasKit via classic <script> + global instead of dynamic import().
-  s = s.replace(
+  s = replaceOrThrow(
+    s,
     /let l = k\(c\(s, "canvaskit\.wasm"\)\), u = await import\(o\);/,
-    'let l = k(c(s, "canvaskit.wasm")), u = await new Promise((RES, REJ) => { if (window.flutterCanvasKitInit) { RES(window.flutterCanvasKitInit); return; } var SC = document.createElement("script"); SC.src = o; SC.onload = () => RES(window.flutterCanvasKitInit); SC.onerror = REJ; document.head.appendChild(SC); });'
+    'let l = k(c(s, "canvaskit.wasm")), u = await new Promise((RES, REJ) => { if (window.flutterCanvasKitInit) { RES(window.flutterCanvasKitInit); return; } var SC = document.createElement("script"); SC.src = o; SC.onload = () => RES(window.flutterCanvasKitInit); SC.onerror = REJ; document.head.appendChild(SC); });',
+    'classic-canvaskit-script'
   );
-
-  writeFileSync(bp, s);
+  writeFileSync(bootstrapPath, s);
   console.log('  patched flutter_bootstrap.js (local CK + classic-script + XHR wasm)');
 }
 
-// 2 + 4: index.html base href + fetch shim.
+// index.html: base href + file:// fetch shim (both renderers).
 {
   const ip = join(WEB, 'index.html');
   let s = readFileSync(ip, 'utf8');
-  s = s.replace('<base href="/">', '<base href="./">');
+  s = replaceOrThrow(s, /<base href="\/">/, '<base href="./">', 'base-href');
   if (!s.includes('webOS file:// fetch shim')) {
+    if (!s.includes('<body>')) {
+      throw new Error('patch_webos: [fetch-shim] <body> anchor not found in index.html.');
+    }
     const shim = `  <!-- webOS file:// fetch shim (XHR-backed) -->
   <script>
     (function () {
@@ -122,6 +155,9 @@ for (const f of ['flutter.js', 'flutter_bootstrap.js', 'main.dart.js']) esTransp
   </script>
 `;
     s = s.replace('<body>', '<body>\n' + shim);
+    console.log('  ✓ [fetch-shim] injected');
+  } else {
+    console.log('  • [fetch-shim] already present');
   }
   writeFileSync(ip, s);
   console.log('  patched index.html (base href ./ + fetch shim)');

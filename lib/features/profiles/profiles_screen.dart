@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/l10n/app_strings.dart';
+import '../../core/language/language_prefs.dart';
 import '../../core/providers/profile_provider.dart';
 import '../../core/storage/category_prefs_notifier.dart';
 import '../../core/storage/storage_service.dart';
@@ -49,6 +50,7 @@ class _ProfilesScreenState extends ConsumerState<ProfilesScreen> {
                 if (p.id == activeId) return;
                 await ref.read(profileProvider.notifier).switchProfile(p.id);
                 ref.read(categoryPrefsProvider.notifier).reload();
+                ref.read(languagePrefsProvider.notifier).reload();
                 if (context.mounted) context.go('/home');
               },
               onEdit: () => _showEditDialog(context, ref, s, p),
@@ -105,6 +107,7 @@ class _ProfilesScreenState extends ConsumerState<ProfilesScreen> {
                 switchTo: true,
               );
           ref.read(categoryPrefsProvider.notifier).reload();
+          ref.read(languagePrefsProvider.notifier).reload();
           // Dialog closes itself (see _ProfileDialogState._save).
           if (mounted) setState(() {}); // show the new profile immediately
         },
@@ -165,6 +168,7 @@ class _ProfilesScreenState extends ConsumerState<ProfilesScreen> {
     if (ok == true && ctx.mounted) {
       await ref.read(profileProvider.notifier).deleteProfile(p.id);
       ref.read(categoryPrefsProvider.notifier).reload();
+      ref.read(languagePrefsProvider.notifier).reload();
       if (mounted) setState(() {}); // remove the deleted card immediately
     }
   }

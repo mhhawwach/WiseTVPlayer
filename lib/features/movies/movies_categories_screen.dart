@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/language/language_prefs.dart';
 import '../../core/storage/category_prefs_notifier.dart';
 import '../../core/storage/storage_service.dart';
 import '../../core/widgets/category_grid.dart';
@@ -34,6 +35,7 @@ class MoviesCategoriesScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(vodCategoriesProvider);
     final prefs = ref.watch(categoryPrefsProvider);
+    final langPrefs = ref.watch(languagePrefsProvider);
     // Kick off the full movie list fetch in the background the moment the
     // categories screen appears.  By the time the user taps any category tile
     // (typically 1-3 s of browsing) the data is already loading or fully
@@ -48,7 +50,9 @@ class MoviesCategoriesScreen extends ConsumerWidget {
             message: e.toString(),
             onRetry: () => ref.invalidate(vodCategoriesProvider)),
         data: (cats) {
-          final visible = applyOrderAndFilter(cats, prefs, 'movies');
+          final blocked = blockedCategoryIdsFor(cats, langPrefs);
+          final visible = applyOrderAndFilter(cats, prefs, 'movies',
+              langBlocked: blocked);
           final withAll = [_allCategory, ...visible];
 
           return Column(

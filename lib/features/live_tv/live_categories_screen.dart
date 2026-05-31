@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/language/language_prefs.dart';
 import '../../core/storage/category_prefs_notifier.dart';
 import '../../core/storage/storage_service.dart';
 import '../../core/widgets/category_grid.dart';
@@ -34,6 +35,7 @@ class LiveCategoriesScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final categoriesAsync = ref.watch(liveCategoriesProvider);
     final prefs = ref.watch(categoryPrefsProvider);
+    final langPrefs = ref.watch(languagePrefsProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -51,7 +53,9 @@ class LiveCategoriesScreen extends ConsumerWidget {
             message: e.toString(),
             onRetry: () => ref.invalidate(liveCategoriesProvider)),
         data: (categories) {
-          final visible = applyOrderAndFilter(categories, prefs, 'live');
+          final blocked = blockedCategoryIdsFor(categories, langPrefs);
+          final visible = applyOrderAndFilter(categories, prefs, 'live',
+              langBlocked: blocked);
           // Prepend the "All" card — it's never hidden/locked
           final withAll = [_allCategory, ...visible];
 

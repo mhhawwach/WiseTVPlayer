@@ -73,6 +73,9 @@ class WiseTVPlayerApp extends ConsumerWidget {
         // Recover D-pad focus if it's ever lost (TV only) so the highlight
         // never just disappears requiring blind presses to get it back.
         result = FocusRecovery(child: result);
+        // On the web build (webOS) the default arrow-key directional traversal
+        // doesn't fire reliably, so drive it explicitly. No-op off the web.
+        result = WebDirectionalFocus(child: result);
         // NOTE: hardware-Back interception is done at the shell-route level
         // (see HomeShell) — a handler here, above go_router's Router, never
         // sees the event because the Router consumes it first.

@@ -5,6 +5,25 @@
     WiseTVPlayer — Flutter Web entry point
     Targets: LG WebOS (Chromium), standard browsers
   -->
+  <!-- ⚠️ webOS Chrome 79 polyfills — DO NOT REMOVE. FinalizationRegistry + WeakRef
+       are Chrome 84+ APIs that Flutter 3.44's CanvasKit engine REQUIRES. Without
+       them CanvasKit throws "FinalizationRegistry is not a constructor", never
+       initialises, and the app shows a grey screen on the TV (verified on
+       75NANO75VPA / webOS 6.5.3 / Chrome 79). No-op stubs are enough to boot the
+       engine; modern browsers keep their native implementations (guarded). -->
+  <script>
+    (function () {
+      if (typeof window.FinalizationRegistry === 'undefined') {
+        window.FinalizationRegistry = function (cb) { this._cb = cb; };
+        window.FinalizationRegistry.prototype.register = function () {};
+        window.FinalizationRegistry.prototype.unregister = function () {};
+      }
+      if (typeof window.WeakRef === 'undefined') {
+        window.WeakRef = function (t) { this._t = t; };
+        window.WeakRef.prototype.deref = function () { return this._t; };
+      }
+    })();
+  </script>
   <base href="$FLUTTER_BASE_HREF">
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
@@ -26,9 +45,55 @@
     }
     /* Hide scrollbars on WebOS */
     ::-webkit-scrollbar { display: none; }
+
+    /* ── Instant boot screen ──────────────────────────────────────────────
+       Shown immediately while CanvasKit's wasm compiles (unavoidable on the
+       TV's old Chromium — there is no compiled-module cache on file://). It is
+       removed on Flutter's `flutter-first-frame` event, handing off to the
+       in-app animated splash. Chrome-79-safe CSS (no `inset` shorthand). */
+    #wise-boot {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99999;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background-color: #0A0A0F; color: #F0F0F0;
+      font-family: -apple-system, Roboto, "Segoe UI", Arial, sans-serif;
+      transition: opacity 0.45s ease;
+    }
+    #wise-boot .wb-title { font-size: 30px; font-weight: 700; letter-spacing: 0.5px; }
+    #wise-boot .wb-title b { color: #6C63FF; }
+    #wise-boot .wb-spin {
+      margin-top: 26px; width: 46px; height: 46px; border-radius: 50%;
+      border: 3px solid rgba(108, 99, 255, 0.22);
+      border-top-color: #6C63FF;
+      -webkit-animation: wb-rot 0.9s linear infinite;
+      animation: wb-rot 0.9s linear infinite;
+    }
+    #wise-boot .wb-sub { margin-top: 20px; font-size: 13px; color: #8A8A9A; }
+    @-webkit-keyframes wb-rot { to { -webkit-transform: rotate(360deg); } }
+    @keyframes wb-rot { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
+  <!-- Instant boot screen — covers the CanvasKit wasm compile; removed on first frame. -->
+  <div id="wise-boot">
+    <div class="wb-title">Wise<b>Vod</b>Player</div>
+    <div class="wb-spin"></div>
+    <div class="wb-sub">Loading…</div>
+  </div>
+  <script>
+    (function () {
+      function hideBoot() {
+        var el = document.getElementById('wise-boot');
+        if (!el) return;
+        el.style.opacity = '0';
+        window.setTimeout(function () {
+          if (el && el.parentNode) el.parentNode.removeChild(el);
+        }, 500);
+      }
+      // Flutter fires this on window when the first frame paints.
+      window.addEventListener('flutter-first-frame', hideBoot);
+    })();
+  </script>
+
   <!-- mpegts.js — plays MPEG-TS (.ts) live streams via MSE. WebOS Chromium
        cannot play raw MPEG-TS in a bare <video>, and Xtream live channels are
        /live/.../<id>.ts, so this is required for live TV on webOS. -->

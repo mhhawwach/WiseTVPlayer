@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 /// Wraps the Android PiP MethodChannel + EventChannel.
@@ -20,7 +20,7 @@ class PipService {
 
   /// True if this device supports PiP (Android 8+, non-TV).
   Future<bool> get isSupported async {
-    if (!Platform.isAndroid) return false;
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return false;
     try {
       return await _method.invokeMethod<bool>('isPipSupported') ?? false;
     } catch (_) {
@@ -31,7 +31,7 @@ class PipService {
   /// Request PiP mode with the given aspect ratio (default 16 : 9).
   /// Returns true if the OS accepted the request.
   Future<bool> enter({int width = 16, int height = 9}) async {
-    if (!Platform.isAndroid) return false;
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return false;
     try {
       return await _method.invokeMethod<bool>(
             'enterPip',
@@ -46,7 +46,7 @@ class PipService {
   /// Broadcast stream of PiP-mode transitions.
   /// Emits `true` when the window shrinks into PiP, `false` when restored.
   Stream<bool> get changes {
-    if (!Platform.isAndroid) return const Stream.empty();
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return const Stream.empty();
     _stream ??= _event
         .receiveBroadcastStream()
         .map((v) => v as bool)

@@ -1,14 +1,16 @@
-import 'dart:io';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// User-selectable performance mode.
-enum PerfMode { auto, low, high }
+enum PerfMode { auto, low, high, ultra }
 
 /// Resolved hardware class.
-enum PerfTier { low, high }
+///   • low   — weak TVs (webOS α5-class, 2 GB Android boxes): minimal everything.
+///   • high  — capable phones / Android TV: full effects, 250 MB image cache.
+///   • ultra — desktop (Windows/macOS/Linux): cranks cache + buffers for max speed.
+enum PerfTier { low, high, ultra }
 
 /// App-wide performance profile.
 ///
@@ -59,17 +61,23 @@ class Perf {
     autoDetectedLowEnd = await _detectLowEnd();
     tier = _resolveTier(mode);
 
-    final bool tierHigh = tier == PerfTier.high;
+    // high AND ultra are "capable": full motion, wallpaper, large image cache.
+    final bool capable = tier != PerfTier.low;
     // null override → follow the tier default.
-    reduceMotion = !(prefs.getBool(_kMotion) ?? tierHigh);
-    wallpaperAllowed = prefs.getBool(_kWallpaper) ?? tierHigh;
-    largeImageCache = prefs.getBool(_kCache) ?? tierHigh;
+    reduceMotion = !(prefs.getBool(_kMotion) ?? capable);
+    wallpaperAllowed = prefs.getBool(_kWallpaper) ?? capable;
+    largeImageCache = prefs.getBool(_kCache) ?? capable;
   }
 
   /// Apply the resolved image-cache budget to the engine's [imageCache].
   static void applyImageCache() {
     final cache = PaintingBinding.instance.imageCache;
-    if (largeImageCache) {
+    if (tier == PerfTier.ultra) {
+      // Ultra (desktop): huge cache so poster grids never re-decode. PCs have
+      // the RAM; this is the bulk of the "lightning fast" feel.
+      cache.maximumSize = 1200;
+      cache.maximumSizeBytes = 1024 * 1024 * 1024; // 1 GB
+    } else if (largeImageCache) {
       // High tier: generous cache for buttery poster scrolling on capable TVs.
       cache.maximumSize = 400;
       cache.maximumSizeBytes = 250 * 1024 * 1024;
@@ -80,6 +88,14 @@ class Perf {
       cache.maximumSizeBytes = 64 * 1024 * 1024;
     }
   }
+
+  /// libmpv demuxer/back-buffer budget for the active tier — bigger = instant
+  /// seeks and near-zero channel-switch time. Used by [PlayerFactory].
+  static int get mediaBufferBytes => switch (tier) {
+        PerfTier.ultra => 128 * 1024 * 1024, // desktop: huge buffer
+        PerfTier.high => 32 * 1024 * 1024,
+        PerfTier.low => 8 * 1024 * 1024,
+      };
 
   // ── Setters (Settings UI) — persist + update the live snapshot ────────────
 
@@ -94,10 +110,10 @@ class Perf {
 
     mode = m;
     tier = _resolveTier(m);
-    final bool tierHigh = tier == PerfTier.high;
-    reduceMotion = !tierHigh;
-    wallpaperAllowed = tierHigh;
-    largeImageCache = tierHigh;
+    final bool capable = tier != PerfTier.low; // high or ultra
+    reduceMotion = !capable;
+    wallpaperAllowed = capable;
+    largeImageCache = capable;
   }
 
   static Future<void> setAnimations(bool on) async {
@@ -123,18 +139,37 @@ class Perf {
   static PerfMode _parseMode(String? v) => switch (v) {
         'low' => PerfMode.low,
         'high' => PerfMode.high,
+        'ultra' => PerfMode.ultra,
         _ => PerfMode.auto,
       };
+
+  /// Native desktop (Windows/macOS/Linux) — strong hardware, gets Ultra by default.
+  static bool get _isDesktop =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.macOS ||
+          defaultTargetPlatform == TargetPlatform.linux);
 
   static PerfTier _resolveTier(PerfMode m) => switch (m) {
         PerfMode.low => PerfTier.low,
         PerfMode.high => PerfTier.high,
-        PerfMode.auto =>
-          autoDetectedLowEnd ? PerfTier.low : PerfTier.high,
+        PerfMode.ultra => PerfTier.ultra,
+        PerfMode.auto => autoDetectedLowEnd
+            ? PerfTier.low
+            : (_isDesktop ? PerfTier.ultra : PerfTier.high),
       };
 
   static Future<bool> _detectLowEnd() async {
-    if (!Platform.isAndroid) return false;
+    // Smart-TV web builds (webOS / Tizen) run CanvasKit on weak TV GPUs/CPUs.
+    // Always treat them as low tier: kills continuous animations, the heavy
+    // wallpaper compositing, and the large image cache — all of which otherwise
+    // starve the TV's renderer (verified: animations + wallpaper made the UI
+    // unresponsive on webOS 6.5.3 / Chrome 79).
+    // ignore: do_not_use_environment
+    const target = String.fromEnvironment('FLUTTER_TARGET_PLATFORM');
+    if (target.contains('webos') || target.contains('tizen')) return true;
+    // Other native low-end detection is Android-only; web/iOS/desktop assume capable.
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return false;
     try {
       return await _channel.invokeMethod<bool>('isLowEndDevice') ?? false;
     } catch (_) {

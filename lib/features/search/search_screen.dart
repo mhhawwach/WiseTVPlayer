@@ -2,15 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/language/language_prefs.dart';
 import '../../core/storage/storage_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/channel_logo.dart';
 import '../../core/widgets/focusable_card.dart';
+import '../../data/models/live_category.dart';
 import '../../data/models/live_stream.dart';
 import '../../data/models/vod_stream.dart';
 import '../../data/models/series_stream.dart';
 import '../../features/player/live_player_screen.dart';
 import '../../services/xtream_service.dart';
+import '../live_tv/live_categories_screen.dart' show liveCategoriesProvider;
+import '../movies/movies_categories_screen.dart' show vodCategoriesProvider;
+import '../series/series_categories_screen.dart' show seriesCategoriesProvider;
 
 // ── Result model ─────────────────────────────────────────────────────────────
 
@@ -79,15 +84,20 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   List<_SearchResult> _buildResults(
     AsyncValue<List<LiveStream>> live,
     AsyncValue<List<VodStream>> vod,
-    AsyncValue<List<SeriesStream>> series,
-  ) {
+    AsyncValue<List<SeriesStream>> series, {
+    required Set<String> blockedLive,
+    required Set<String> blockedVod,
+    required Set<String> blockedSeries,
+  }) {
     if (_query.length < 2) return [];
     final q = _query.toLowerCase();
     final results = <_SearchResult>[];
 
     if (live.hasValue) {
       results.addAll(live.value!
-          .where((c) => c.name.toLowerCase().contains(q))
+          .where((c) =>
+              c.name.toLowerCase().contains(q) &&
+              !blockedLive.contains(c.categoryId))
           .take(20)
           .map((c) => _SearchResult(
               type: _ResultType.live,
@@ -97,7 +107,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     }
     if (vod.hasValue) {
       results.addAll(vod.value!
-          .where((m) => m.name.toLowerCase().contains(q))
+          .where((m) =>
+              m.name.toLowerCase().contains(q) &&
+              !blockedVod.contains(m.categoryId))
           .take(20)
           .map((m) => _SearchResult(
               type: _ResultType.vod,
@@ -108,7 +120,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     }
     if (series.hasValue) {
       results.addAll(series.value!
-          .where((s) => s.name.toLowerCase().contains(q))
+          .where((s) =>
+              s.name.toLowerCase().contains(q) &&
+              !blockedSeries.contains(s.categoryId))
           .take(20)
           .map((s) => _SearchResult(
               type: _ResultType.series, id: s.seriesId, name: s.name, icon: s.cover)));
@@ -161,8 +175,28 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final vod = ref.watch(_allVodProvider);
     final series = ref.watch(_allSeriesProvider);
 
+    // Language filter — hide results in unselected languages (genres / untagged
+    // categories are always searchable).
+    final langPrefs = ref.watch(languagePrefsProvider);
+    final blockedLive = blockedCategoryIdsFor(
+        ref.watch(liveCategoriesProvider).value ?? const <LiveCategory>[],
+        langPrefs);
+    final blockedVod = blockedCategoryIdsFor(
+        ref.watch(vodCategoriesProvider).value ?? const <LiveCategory>[],
+        langPrefs);
+    final blockedSeries = blockedCategoryIdsFor(
+        ref.watch(seriesCategoriesProvider).value ?? const <LiveCategory>[],
+        langPrefs);
+
     final loading = live.isLoading || vod.isLoading || series.isLoading;
-    final results = _buildResults(live, vod, series);
+    final results = _buildResults(
+      live,
+      vod,
+      series,
+      blockedLive: blockedLive,
+      blockedVod: blockedVod,
+      blockedSeries: blockedSeries,
+    );
 
     return Scaffold(
       appBar: AppBar(

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/language/language_prefs.dart';
 import '../../core/perf/perf_profile.dart';
 import '../../core/providers/wallpaper_provider.dart';
 import '../../core/storage/storage_service.dart';
@@ -12,11 +13,15 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/image_cache_manager.dart';
 import '../../core/widgets/focusable_card.dart';
 import '../../core/utils/rating.dart';
+import '../../data/models/live_category.dart';
 import '../../data/models/series_stream.dart';
 import '../../data/models/vod_stream.dart';
 import '../../features/player/series_player_screen.dart';
 import '../../features/player/vod_player_screen.dart';
+import '../movies/movies_categories_screen.dart' show vodCategoriesProvider;
 import '../movies/movies_list_screen.dart';
+import '../onboarding/language_prefs_dialog.dart';
+import '../series/series_categories_screen.dart' show seriesCategoriesProvider;
 import '../series/series_list_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -29,8 +34,31 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final wallpaper = ref.watch(wallpaperProvider);
-    final vodAsync = ref.watch(allVodStreamsProvider);
-    final seriesAsync = ref.watch(allSeriesProvider);
+
+    // ── Content-language filter ─────────────────────────────────────────────
+    // The home rows (hero / recently added / top rated / popular series) draw
+    // from the full catalogue, so they must respect the same language filter as
+    // the category grids. We map each item's category_id → language via the
+    // category lists and drop items in unselected languages. Categories with no
+    // language marker (genres) are never blocked.
+    final langPrefs = ref.watch(languagePrefsProvider);
+    final vodCats =
+        ref.watch(vodCategoriesProvider).value ?? const <LiveCategory>[];
+    final seriesCats =
+        ref.watch(seriesCategoriesProvider).value ?? const <LiveCategory>[];
+    final blockedVod = blockedCategoryIdsFor(vodCats, langPrefs);
+    final blockedSeries = blockedCategoryIdsFor(seriesCats, langPrefs);
+
+    final vodAsync = ref.watch(allVodStreamsProvider).whenData((list) =>
+        blockedVod.isEmpty
+            ? list
+            : list.where((m) => !blockedVod.contains(m.categoryId)).toList());
+    final seriesAsync = ref.watch(allSeriesProvider).whenData((list) =>
+        blockedSeries.isEmpty
+            ? list
+            : list
+                .where((s) => !blockedSeries.contains(s.categoryId))
+                .toList());
     final pid = StorageService.activePlaylistId;
     final playlistName =
         pid != null ? (StorageService.getPlaylist(pid)?.name ?? '') : '';
@@ -50,6 +78,9 @@ class HomeScreen extends ConsumerWidget {
       body: Stack(
         children: [
           WallpaperBackground(mode: wallpaper),
+          // Invisible — fires the one-time "customize your experience" popup on
+          // first launch of each profile/playlist.
+          const LanguagePrefsGate(),
           CustomScrollView(
             slivers: [
               // ── Transparent app bar ────────────────────────────────────────
