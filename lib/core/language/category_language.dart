@@ -82,7 +82,7 @@ class CategoryLanguage {
       code: 'EN',
       words: ['english', 'britain', 'british', 'america', 'american',
         'ireland', 'irish'],
-      codes: ['en', 'eng', 'uk', 'us', 'usa'],
+      codes: ['en', 'eng', 'uk', 'us', 'usa', 'au'],
     ),
     LanguageDef(
       key: 'french',
@@ -98,8 +98,9 @@ class CategoryLanguage {
       code: 'DE',
       words: ['german', 'germany', 'deutsch', 'deutsche', 'deutschland',
         'austria', 'austrian'],
-      // 'de' excluded — collides with Romance "de" ("Filmes de Terror").
-      codes: [],
+      // 'de' is now safe: codes match only as a leading prefix ("DE :", "DE |"),
+      // never mid-string, so the Romance "de" ("Filmes de Terror") can't trip it.
+      codes: ['de'],
     ),
     LanguageDef(
       key: 'spanish',
@@ -166,7 +167,8 @@ class CategoryLanguage {
       words: ['indian', 'india', 'hindi', 'bollywood', 'tamil', 'telugu',
         'punjabi', 'urdu', 'pakistan', 'pakistani', 'malayalam', 'kannada',
         'bengali', 'bangla'],
-      codes: [],
+      // Prefix-only, so "IN |"/"HI |" tag Indian while "Movies in HD" doesn't.
+      codes: ['in', 'hi'],
     ),
     LanguageDef(
       key: 'korean',
@@ -389,7 +391,9 @@ class CategoryLanguage {
   static final Map<String, RegExp> _codeRe = {};
   static RegExp _re(String code) => _codeRe.putIfAbsent(
         code,
-        () => RegExp('(^|[^a-z])${RegExp.escape(code)}(\$|[^a-z])'),
+        // Codes match only as a LEADING prefix ("DE :", "IN |", "[FR]"), never
+        // mid-string — so "Filmes de Terror" / "Movies in HD" aren't misread.
+        () => RegExp('^[^a-z]*${RegExp.escape(code)}(?![a-z])'),
       );
 
   /// Returns the canonical language key for [categoryName], or `null` when the

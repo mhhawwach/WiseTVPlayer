@@ -1,3 +1,6 @@
+# Native webOS app — local-only playlist seed (real credentials, never commit)
+webos_native/js/seed.js
+
 # Flutter
 .dart_tool/
 .flutter-plugins

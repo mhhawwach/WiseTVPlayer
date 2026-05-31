@@ -1,0 +1,255 @@
+/* WiseVodPlayer — native webOS app.
+   Design rules for the weak α5 TV GPU:
+   - Focus highlight = solid border + transform:scale (GPU-composited). No
+     box-shadow blur on list items, no per-item gradients, no backdrop filters.
+   - Flat solid colours. Repaints are cheap; only transforms animate.
+   - 10-foot UI: large type, generous spacing, 1920x1080 canvas. */
+
+:root {
+  --bg: #0A0A0F;
+  --surface: #14141C;
+  --card: #1C1C28;
+  --card-2: #232331;
+  --primary: #6C5CE7;
+  --accent: #22D3EE;
+  --focus: #22D3EE;
+  --text: #F5F5FA;
+  --text-2: #A6A6B8;
+  --muted: #6C6C80;
+  --divider: #2A2A3A;
+  --live: #FF5252;
+  --ok: #34D399;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  width: 1920px; height: 1080px; overflow: hidden;
+  background: var(--bg); color: var(--text);
+  font-family: "LG Smart UI", "Segoe UI", Roboto, system-ui, sans-serif;
+  -webkit-user-select: none; user-select: none;
+  cursor: default;
+}
+img { -webkit-user-drag: none; }
+
+/* ── Boot splash (no white flash) ───────────────────────────────────────────*/
+#boot {
+  position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 1000;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: var(--bg);
+  transition: opacity .25s ease;
+}
+#boot.hide { opacity: 0; pointer-events: none; }
+.boot-logo { font-size: 64px; font-weight: 800; letter-spacing: -1px; }
+.boot-logo span { color: var(--primary); }
+.boot-bar { margin-top: 28px; width: 220px; height: 4px; border-radius: 4px; background: #20202C; overflow: hidden; }
+.boot-bar i { display: block; width: 40%; height: 100%; background: var(--accent); border-radius: 4px; animation: slide 1.1s infinite ease-in-out; }
+@keyframes slide { 0% { transform: translateX(-120%);} 100% { transform: translateX(320%);} }
+
+/* ── Screen container ───────────────────────────────────────────────────────*/
+#app { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
+.screen { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; flex-direction: column; }
+.screen-pad { padding: 48px 64px; }
+
+/* ── Focusable ──────────────────────────────────────────────────────────────*/
+.focusable { outline: none; border: 3px solid transparent; border-radius: 14px; transition: transform .12s ease, border-color .12s ease, background-color .12s ease; }
+.focusable.focused { border-color: var(--focus); transform: scale(1.05); background-color: rgba(34,211,238,.10); position: relative; z-index: 5; }
+/* large tiles scale less to avoid overflow */
+.tile.focused, .poster.focused { transform: scale(1.07); }
+.row-item.focused { transform: scale(1.02); }
+
+/* ── Top bar ────────────────────────────────────────────────────────────────*/
+.topbar { display: flex; align-items: center; gap: 18px; padding: 28px 64px 10px; }
+.topbar .logo { font-size: 30px; font-weight: 800; letter-spacing: -.5px; }
+.topbar .logo span { color: var(--primary); }
+.topbar .pl { color: var(--accent); font-size: 18px; font-weight: 600; }
+.topbar .spacer { flex: 1; }
+.topbar .clock { color: var(--text-2); font-size: 20px; font-variant-numeric: tabular-nums; }
+
+/* ── Home menu (big tiles) ──────────────────────────────────────────────────*/
+.menu { display: flex; gap: 28px; padding: 40px 64px; flex-wrap: wrap; }
+.tile {
+  width: 360px; height: 220px; background: var(--card);
+  display: flex; flex-direction: column; justify-content: flex-end;
+  padding: 26px; border-radius: 18px; cursor: pointer;
+}
+.tile .ico { font-size: 46px; line-height: 1; }
+.tile .t { font-size: 26px; font-weight: 700; margin-top: 14px; }
+.tile .s { font-size: 16px; color: var(--text-2); margin-top: 4px; }
+.tile.live .ico { color: var(--live); }
+.tile.movies .ico { color: var(--primary); }
+.tile.series .ico { color: var(--accent); }
+
+.rowtitle { font-size: 22px; font-weight: 700; padding: 26px 64px 12px; }
+
+/* ── Category list (rows) ───────────────────────────────────────────────────*/
+.catlist { flex: 1; overflow-y: auto; padding: 8px 64px 64px; }
+.row-item {
+  display: flex; align-items: center; gap: 20px;
+  height: 78px; padding: 0 24px; margin-bottom: 12px;
+  background: var(--card); border-radius: 14px; cursor: pointer;
+}
+.row-item .badge { width: 44px; height: 44px; border-radius: 11px; background: var(--card-2); display: flex; align-items: center; justify-content: center; font-size: 22px; color: var(--primary); flex: none; }
+.row-item .name { font-size: 21px; font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row-item .chev { color: var(--accent); font-size: 26px; flex: none; }
+.row-item .count { color: var(--muted); font-size: 16px; flex: none; }
+
+/* ── Content grid (posters / channels) ──────────────────────────────────────*/
+.grid { flex: 1; overflow-y: auto; padding: 12px 64px 80px; display: flex; flex-wrap: wrap; gap: 22px; align-content: flex-start; }
+.poster { width: 220px; cursor: pointer; border-radius: 14px; }
+.poster .art { width: 100%; height: 320px; border-radius: 12px; background: var(--card-2) center/cover no-repeat; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.poster .art img { width: 100%; height: 100%; object-fit: cover; }
+.poster .art .ph { font-size: 40px; color: var(--muted); }
+.poster .cap { font-size: 17px; margin-top: 8px; line-height: 1.25; max-height: 44px; overflow: hidden; }
+
+/* channel tiles (wider, shorter) */
+.chan { width: 300px; }
+.chan .art { height: 150px; background: var(--card-2); }
+.chan .art img { object-fit: contain; padding: 14px; }
+
+/* ── Detail screen ──────────────────────────────────────────────────────────*/
+.detail { flex: 1; display: flex; gap: 44px; padding: 56px 64px; }
+.detail .cover { width: 340px; height: 500px; border-radius: 16px; background: var(--card-2) center/cover; flex: none; }
+.detail .cover img { width: 100%; height: 100%; object-fit: cover; border-radius: 16px; }
+.detail .meta { flex: 1; min-width: 0; }
+.detail h1 { font-size: 40px; font-weight: 800; line-height: 1.1; }
+.detail .sub { color: var(--text-2); font-size: 19px; margin-top: 14px; }
+.detail .plot { color: var(--text-2); font-size: 19px; line-height: 1.5; margin-top: 22px; max-height: 280px; overflow: hidden; }
+.detail .actions { display: flex; gap: 18px; margin-top: 32px; flex-wrap: wrap; }
+.btn { background: var(--card); padding: 16px 30px; border-radius: 12px; font-size: 20px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 10px; }
+.btn.primary { background: var(--primary); }
+
+/* episode chips */
+.eps { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 20px; }
+.ep { background: var(--card); padding: 12px 18px; border-radius: 10px; font-size: 17px; cursor: pointer; }
+.seasonbar { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+.season { background: var(--card-2); padding: 10px 18px; border-radius: 10px; font-size: 16px; cursor: pointer; }
+.season.active { background: var(--primary); }
+
+/* ── Login / form ───────────────────────────────────────────────────────────*/
+.form { max-width: 720px; margin: 60px auto; padding: 0 64px; }
+.form h1 { font-size: 38px; font-weight: 800; margin-bottom: 8px; }
+.form p { color: var(--text-2); font-size: 18px; margin-bottom: 30px; }
+.field { margin-bottom: 22px; }
+.field label { display: block; color: var(--text-2); font-size: 16px; margin-bottom: 8px; }
+.field input { width: 100%; height: 64px; background: var(--card); border: 3px solid transparent; border-radius: 12px; color: var(--text); font-size: 22px; padding: 0 20px; }
+.field input.focused, .focusable.focused > input { border-color: var(--focus); }
+.field.focusable.focused { transform: none; background: transparent; }
+.field.focusable.focused input { border-color: var(--focus); }
+
+/* ── Modal (language popup) ─────────────────────────────────────────────────*/
+.scrim { position: fixed; top: 0; right: 0; bottom: 0; left: 0; background: rgba(0,0,0,.72); z-index: 200; display: flex; align-items: center; justify-content: center; }
+.modal { width: 720px; max-height: 880px; background: var(--card); border-radius: 22px; padding: 36px; display: flex; flex-direction: column; }
+.modal h2 { font-size: 30px; font-weight: 800; }
+.modal .desc { color: var(--text-2); font-size: 18px; margin: 14px 0 22px; line-height: 1.45; }
+.langlist { overflow-y: auto; flex: 1; }
+.langrow { display: flex; align-items: center; gap: 16px; height: 70px; padding: 0 20px; margin-bottom: 12px; background: var(--card-2); border-radius: 12px; cursor: pointer; }
+.langrow .code { font-size: 14px; font-weight: 800; color: var(--accent); background: rgba(0,0,0,.35); padding: 5px 10px; border-radius: 7px; letter-spacing: .5px; }
+.langrow .lname { flex: 1; font-size: 22px; font-weight: 600; }
+.langrow .chk { width: 30px; height: 30px; border-radius: 8px; border: 2px solid var(--muted); display: flex; align-items: center; justify-content: center; font-size: 20px; color: #fff; }
+.langrow.on .chk { background: var(--primary); border-color: var(--primary); }
+.langrow.on { background: rgba(108,92,231,.16); }
+.modal .foot { display: flex; gap: 16px; margin-top: 22px; }
+.modal .foot .btn { flex: 1; justify-content: center; }
+
+/* ── Player ─────────────────────────────────────────────────────────────────*/
+/* Transparent so the hardware video plane (behind the web page) shows through.
+   webOS decodes video onto a plane BEHIND the graphics; an opaque background
+   here would hide it (audio plays, no picture). */
+.player { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: transparent; display: block; }
+/* Absolutely positioned (NOT a flex item) so its painted box is always the full
+   screen — as a flex child its height could collapse to ~0 (audio plays, no
+   picture) even though the stream decodes. */
+.player video { position: absolute; top: 0; right: 0; bottom: 0; left: 0; width: 100%; height: 100%; background: transparent; z-index: 1; }
+.player .ctl, .player .spin { z-index: 3; }
+/* While a video is open, clear the page background entirely so nothing in the
+   graphics plane occludes the video plane. Restored on Back. */
+html.playing, body.playing { background-color: transparent !important; }
+html.playing #app { background-color: transparent !important; }
+.player .ctl { position: absolute; left: 0; right: 0; bottom: 0; padding: 40px 64px; background: linear-gradient(transparent, rgba(0,0,0,.85)); transition: opacity .2s; }
+.player .ctl.hide { opacity: 0; }
+.player .title { font-size: 28px; font-weight: 700; margin-bottom: 16px; }
+.player .bar { height: 6px; background: rgba(255,255,255,.25); border-radius: 4px; overflow: hidden; }
+.player .bar i { display: block; height: 100%; width: 0; background: var(--accent); }
+.player .pbtns { display: flex; gap: 16px; margin-top: 18px; }
+.player .spin { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); }
+.player .phint { margin-top: 14px; color: rgba(255,255,255,.6); font-size: 15px; }
+
+/* ── Misc ───────────────────────────────────────────────────────────────────*/
+.center { flex: 1; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px; color: var(--text-2); font-size: 20px; }
+.spinner { width: 54px; height: 54px; border: 5px solid #23232f; border-top-color: var(--accent); border-radius: 50%; animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+#toast { position: fixed; bottom: 56px; left: 50%; transform: translateX(-50%); background: #000; border: 1px solid var(--divider); color: var(--text); padding: 16px 28px; border-radius: 12px; font-size: 18px; z-index: 500; }
+.hidden { display: none !important; }
+
+/* ── Rich home: side rail + hero + poster rows ──────────────────────────────*/
+.home { flex-direction: row; }
+.rail { width: 104px; background: #0E0E16; border-right: 1px solid var(--divider); display: flex; flex-direction: column; align-items: center; padding: 22px 0; }
+.rail .rlogo { font-size: 13px; font-weight: 800; color: var(--primary); text-align: center; line-height: 1.05; margin-bottom: 26px; }
+.rail-item { width: 80px; height: 78px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; margin-bottom: 12px; cursor: pointer; color: var(--text-2); }
+.rail-item .ri { font-size: 28px; }
+.rail-item .rl { font-size: 12px; margin-top: 5px; }
+.rail-item.active { color: var(--primary); background: rgba(108, 92, 231, .14); }
+.home-main { flex: 1; overflow-y: auto; overflow-x: hidden; }
+
+.hero { position: relative; height: 470px; }
+.hero .hbg { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background-position: center 22%; background-size: cover; }
+.hero .hov { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: linear-gradient(90deg, rgba(10,10,15,.96), rgba(10,10,15,.55) 42%, rgba(10,10,15,.05) 75%), linear-gradient(0deg, var(--bg), transparent 45%); }
+.hero .hc { position: absolute; left: 56px; right: 42%; bottom: 48px; }
+.hero h1 { font-size: 48px; font-weight: 800; line-height: 1.04; text-shadow: 0 2px 18px rgba(0,0,0,.85); }
+.hero .hr { color: var(--accent); font-size: 20px; font-weight: 700; margin-top: 14px; }
+.hero .hbtns { display: flex; gap: 16px; margin-top: 26px; }
+
+.prow { margin: 6px 0 16px; }
+.prow .pt { font-size: 23px; font-weight: 700; padding: 12px 56px 12px; }
+.prow .pscroll { display: flex; gap: 18px; overflow-x: auto; overflow-y: hidden; padding: 6px 56px 10px; }
+.prow .poster { width: 156px; flex: none; }
+.prow .poster .art { height: 230px; }
+.prow .poster .cap { font-size: 15px; }
+
+/* ── Profiles ───────────────────────────────────────────────────────────────*/
+.pf-screen { align-items: center; justify-content: center; }
+.pf-title { font-size: 40px; font-weight: 800; margin-bottom: 44px; }
+.pf-grid { display: flex; gap: 40px; flex-wrap: wrap; justify-content: center; max-width: 1400px; }
+.pf-tile { display: flex; flex-direction: column; align-items: center; padding: 12px; border-radius: 18px; cursor: pointer; }
+.pf-name { margin-top: 16px; font-size: 22px; color: var(--text-2); }
+.avatar { border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; }
+.avatar.add { background: var(--card-2); color: var(--text-2); }
+
+/* pickers (profile edit) */
+.flabel { display: block; color: var(--text-2); font-size: 16px; margin: 18px 0 8px; }
+.pick-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.pick { width: 64px; height: 64px; border-radius: 14px; background: var(--card); display: flex; align-items: center; justify-content: center; font-size: 30px; cursor: pointer; }
+.pick.on { background: rgba(108,92,231,.25); }
+.pick.swatch { font-size: 0; }
+.pick.swatch.on { outline: 3px solid #fff; outline-offset: 2px; }
+
+/* ── Search ─────────────────────────────────────────────────────────────────*/
+.searchwrap { padding: 16px 56px; }
+.searchbar { display: flex; align-items: center; gap: 14px; height: 64px; padding: 0 20px; background: var(--card); border-radius: 14px; }
+.searchbar span { font-size: 22px; }
+.searchbar input { flex: 1; background: transparent; border: none; color: var(--text); font-size: 22px; }
+
+/* ── History progress bar on cards ─────────────────────────────────────────────*/
+.poster .art { position: relative; }
+.pbar { position: absolute; left: 0; right: 0; bottom: 0; height: 5px; background: rgba(255,255,255,.2); }
+.pbar i { display: block; height: 100%; background: var(--accent); }
+.rowhead { display: flex; align-items: center; justify-content: space-between; padding-right: 56px; }
+.rowhead .btn { padding: 10px 20px; font-size: 16px; }
+
+/* ── PIN pad ─────────────────────────────────────────────────────────────────*/
+.pin-modal { width: 420px; align-items: center; }
+.pin-dots { display: flex; gap: 16px; justify-content: center; margin: 8px 0 24px; }
+.pin-dot { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--muted); }
+.pin-dot.on { background: var(--primary); border-color: var(--primary); }
+.pinpad { display: flex; flex-wrap: wrap; gap: 14px; width: 320px; }
+.pinkey { width: 92px; height: 78px; border-radius: 14px; background: var(--card-2); display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 700; cursor: pointer; }
+
+/* ── Category manager ───────────────────────────────────────────────────────*/
+.mrow { display: flex; align-items: center; gap: 18px; height: 72px; padding: 0 24px; margin-bottom: 10px; background: var(--card); border-radius: 12px; cursor: pointer; }
+.mrow .name { flex: 1; font-size: 20px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mrow .tag { font-size: 14px; color: var(--muted); padding: 6px 12px; border-radius: 8px; background: var(--card-2); }
+.mrow .tag.on { color: var(--accent); }
+.mbtn { padding: 16px 20px; margin: 6px 0; background: var(--card-2); border-radius: 12px; font-size: 18px; cursor: pointer; }
+
+/* fav/resume buttons inherit .btn */
+.btn.fav.on { background: rgba(255,82,82,.18); }

@@ -54,8 +54,33 @@ void main() {
         () => expect(CategoryLanguage.detect('FR Cinema'), 'french'));
     test('"US Sports" → english',
         () => expect(CategoryLanguage.detect('US Sports'), 'english'));
+    test('"DE : Filme" → german (prefix code)',
+        () => expect(CategoryLanguage.detect('DE : Filme'), 'german'));
+    test('"DE | Kinder" → german',
+        () => expect(CategoryLanguage.detect('DE | Kinder'), 'german'));
+    test('"IN | Movies" → indian (prefix code)',
+        () => expect(CategoryLanguage.detect('IN | Movies'), 'indian'));
+    test('"[FR] Cinema" → french (prefix after punctuation)',
+        () => expect(CategoryLanguage.detect('[FR] Cinema'), 'french'));
     test('Arabic script → arabic',
         () => expect(CategoryLanguage.detect('قنوات عربية'), 'arabic'));
+  });
+
+  group('CategoryLanguage.detect — prefix-code collision guards', () {
+    // German "de" prefix must not fire on common words that merely START "de".
+    test('"Detective" not german',
+        () => expect(CategoryLanguage.detect('Detective'), isNull));
+    test('"Deportes" not german',
+        () => expect(CategoryLanguage.detect('Deportes'), isNull));
+    test('"Documentary" not german',
+        () => expect(CategoryLanguage.detect('Documentary'), isNull));
+    test('"Indie Films" not indian',
+        () => expect(CategoryLanguage.detect('Indie Films'), isNull));
+    // mid-string codes still ignored
+    test('"Filmes de Terror" still not german',
+        () => expect(CategoryLanguage.detect('Filmes de Terror'), isNull));
+    test('"Movies in HD" still not indian',
+        () => expect(CategoryLanguage.detect('Movies in HD'), isNull));
   });
 
   group('CategoryLanguage.detect — collision guards', () {
