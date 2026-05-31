@@ -12,6 +12,7 @@ class FocusableCard extends StatefulWidget {
     required this.child,
     this.onPressed,
     this.onLongPress,
+    this.onFocusChange,
     this.borderRadius = 12.0,
     this.autofocus = false,
     this.focusNode,
@@ -21,6 +22,9 @@ class FocusableCard extends StatefulWidget {
   final Widget child;
   final VoidCallback? onPressed;
   final VoidCallback? onLongPress;
+  /// Optional: notified when this card gains/loses D-pad focus (used e.g. to
+  /// drive the live mini-preview when a channel row is highlighted).
+  final ValueChanged<bool>? onFocusChange;
   final double borderRadius;
   final bool autofocus;
   final FocusNode? focusNode;
@@ -51,6 +55,7 @@ class _FocusableCardState extends State<FocusableCard>
       focusNode: widget.focusNode,
       autofocus: widget.autofocus,
       onFocusChange: (f) {
+        widget.onFocusChange?.call(f);
         if (mounted) {
           setState(() => _focused = f);
           updateKeepAlive();

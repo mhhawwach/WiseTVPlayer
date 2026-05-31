@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -16,8 +18,10 @@ import '../../data/models/live_category.dart';
 import '../../data/models/live_stream.dart';
 import '../../features/epg/epg_panel.dart';
 import '../../features/player/live_player_screen.dart';
+import '../../features/player/widgets/aspect_mode.dart';
 import '../../features/live_tv/catch_up_panel.dart';
 import '../../features/live_tv/live_categories_screen.dart';
+import '../../services/player/player_factory.dart';
 import '../../services/xtream_service.dart';
 
 // ── View mode (grid of logos ⇄ list with now/next EPG) ─────────────────────────
@@ -422,6 +426,8 @@ class _ChannelList extends StatelessWidget {
     required this.channels,
     required this.allChannels,
     this.autofocusFirst = true,
+    this.onChannelFocus,
+    this.onChannelOpen,
   });
 
   final List<LiveStream> channels;
@@ -430,6 +436,13 @@ class _ChannelList extends StatelessWidget {
   /// When false, the first row does not grab focus on build — used by the
   /// two-pane layout so the category list keeps initial focus.
   final bool autofocusFirst;
+
+  /// Fired when a channel row gains focus (drives the live mini-preview).
+  final ValueChanged<LiveStream>? onChannelFocus;
+
+  /// Fired just before navigating to the fullscreen player (lets the caller
+  /// stop the preview so two decoders don't run at once).
+  final VoidCallback? onChannelOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -449,7 +462,9 @@ class _ChannelList extends StatelessWidget {
           key: ValueKey(ch.streamId),
           channel: ch,
           autofocus: autofocusFirst && i == 0,
+          onFocus: onChannelFocus,
           onTap: () {
+            onChannelOpen?.call();
             final id = StorageService.activePlaylistId!;
             final playlist = StorageService.getPlaylist(id)!;
             context.push('/player/live',
@@ -472,11 +487,13 @@ class _ChannelListRow extends ConsumerWidget {
     required this.channel,
     required this.autofocus,
     required this.onTap,
+    this.onFocus,
   });
 
   final LiveStream channel;
   final bool autofocus;
   final VoidCallback onTap;
+  final ValueChanged<LiveStream>? onFocus;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -498,6 +515,7 @@ class _ChannelListRow extends ConsumerWidget {
       child: FocusableCard(
         autofocus: autofocus,
         onPressed: onTap,
+        onFocusChange: onFocus == null ? null : (f) { if (f) onFocus!(channel); },
         borderRadius: 12,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -844,7 +862,7 @@ class _LiveTwoPaneScreenState extends ConsumerState<LiveTwoPaneScreen> {
   }
 }
 
-class _LiveRightPane extends ConsumerWidget {
+class _LiveRightPane extends ConsumerStatefulWidget {
   const _LiveRightPane({
     required this.catId,
     required this.catName,
@@ -860,11 +878,54 @@ class _LiveRightPane extends ConsumerWidget {
   final ValueChanged<_SortMode> onSort;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final searching = search.isNotEmpty;
+  ConsumerState<_LiveRightPane> createState() => _LiveRightPaneState();
+}
+
+class _LiveRightPaneState extends ConsumerState<_LiveRightPane> {
+  // Mini-preview (wide layouts only): a lightweight player that follows the
+  // highlighted channel after a short dwell. Paused before opening fullscreen
+  // so two decoders never run at once. Phones/narrow keep the plain list.
+  AppPlayer? _preview;
+  Timer? _previewTimer;
+  int? _previewId;
+  String _previewName = '';
+
+  AppPlayer _ensurePreview() => _preview ??= PlayerFactory.create();
+
+  void _schedulePreview(LiveStream ch) {
+    if (_previewId == ch.streamId) return;
+    _previewTimer?.cancel();
+    _previewTimer = Timer(const Duration(milliseconds: 700), () {
+      if (!mounted) return;
+      final id = StorageService.activePlaylistId;
+      final pl = id != null ? StorageService.getPlaylist(id) : null;
+      if (pl == null) return;
+      _previewId = ch.streamId;
+      setState(() => _previewName = ch.name);
+      _ensurePreview().open(pl.liveStreamUrl(ch.streamId.toString(), 'ts'));
+    });
+  }
+
+  void _stopPreview() {
+    _previewTimer?.cancel();
+    _previewId = null;
+    _preview?.pause();
+  }
+
+  @override
+  void dispose() {
+    _previewTimer?.cancel();
+    _preview?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final searching = widget.search.isNotEmpty;
     // While searching, query ALL channels regardless of the selected category.
-    final effectiveCatId = searching ? AppConstants.catAllId : catId;
+    final effectiveCatId = searching ? AppConstants.catAllId : widget.catId;
     final channelsAsync = ref.watch(liveChannelsProvider(effectiveCatId));
+    final wide = MediaQuery.of(context).size.width >= 1200;
 
     return Column(
       children: [
@@ -874,7 +935,7 @@ class _LiveRightPane extends ConsumerWidget {
             children: [
               Expanded(
                 child: Text(
-                  searching ? 'Search results' : catName,
+                  searching ? 'Search results' : widget.catName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -887,8 +948,8 @@ class _LiveRightPane extends ConsumerWidget {
               PopupMenuButton<_SortMode>(
                 icon: const Icon(Icons.sort_rounded, size: 22),
                 tooltip: 'Sort',
-                initialValue: sort,
-                onSelected: onSort,
+                initialValue: widget.sort,
+                onSelected: widget.onSort,
                 itemBuilder: (_) => _SortMode.values
                     .map((m) => PopupMenuItem(value: m, child: Text(m.label)))
                     .toList(),
@@ -904,16 +965,74 @@ class _LiveRightPane extends ConsumerWidget {
                   style: const TextStyle(color: AppColors.textSecondary)),
             ),
             data: (channels) {
-              final filtered = _processChannels(channels, search, sort);
-              return _ChannelList(
+              final filtered =
+                  _processChannels(channels, widget.search, widget.sort);
+              final list = _ChannelList(
                 channels: filtered,
                 allChannels: channels,
                 autofocusFirst: false,
+                onChannelFocus: wide ? _schedulePreview : null,
+                onChannelOpen: wide ? _stopPreview : null,
+              );
+              if (!wide) return list;
+              return Row(
+                children: [
+                  Expanded(child: list),
+                  SizedBox(
+                    width: 480,
+                    child: _PreviewPane(player: _ensurePreview(), name: _previewName),
+                  ),
+                ],
               );
             },
           ),
         ),
       ],
+    );
+  }
+}
+
+// Mini-preview pane shown to the right of the channel list on wide screens.
+class _PreviewPane extends StatelessWidget {
+  const _PreviewPane({required this.player, required this.name});
+  final AppPlayer player;
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 6, 14, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AspectRatio(
+            aspectRatio: 16 / 9,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: ColoredBox(
+                color: Colors.black,
+                child: player.buildVideoWidget(context, AspectMode.contain),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            name.isEmpty ? 'Highlight a channel to preview' : name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Press OK to watch fullscreen',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+          ),
+        ],
+      ),
     );
   }
 }
