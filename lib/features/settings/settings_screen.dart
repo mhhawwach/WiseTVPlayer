@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/l10n/app_strings.dart';
@@ -217,7 +218,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ListTile(
             leading: const Icon(Icons.info_outline),
             title: const Text('WiseVodPlayer'),
-            subtitle: Text(s.version),
+            // Real build version (from the package) — never a stale hardcoded string.
+            subtitle: FutureBuilder<PackageInfo>(
+              future: PackageInfo.fromPlatform(),
+              builder: (_, snap) => Text(
+                snap.hasData ? 'v${snap.data!.version}' : '…',
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              ),
+            ),
           ),
           ListTile(
             leading: const Icon(Icons.bug_report_outlined),
