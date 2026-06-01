@@ -925,7 +925,11 @@ class _LiveRightPaneState extends ConsumerState<_LiveRightPane> {
     // While searching, query ALL channels regardless of the selected category.
     final effectiveCatId = searching ? AppConstants.catAllId : widget.catId;
     final channelsAsync = ref.watch(liveChannelsProvider(effectiveCatId));
-    final wide = MediaQuery.of(context).size.width >= 1200;
+    // Show the preview on landscape, roomy layouts. TVs report a SCALED logical
+    // width (e.g. a 1080p panel at 320dpi = 960 logical px), so the old ≥1200
+    // gate wrongly excluded them. Gate on landscape + ≥900 instead.
+    final mq = MediaQuery.of(context).size;
+    final wide = mq.width >= 900 && mq.width > mq.height;
 
     return Column(
       children: [
@@ -975,14 +979,21 @@ class _LiveRightPaneState extends ConsumerState<_LiveRightPane> {
                 onChannelOpen: wide ? _stopPreview : null,
               );
               if (!wide) return list;
-              return Row(
-                children: [
-                  Expanded(child: list),
-                  SizedBox(
-                    width: 480,
-                    child: _PreviewPane(player: _ensurePreview(), name: _previewName),
-                  ),
-                ],
+              // Proportional preview width so it fits both 960-logical TVs and
+              // full-HD-logical desktops.
+              return LayoutBuilder(
+                builder: (ctx, cons) {
+                  final pvW = (cons.maxWidth * 0.42).clamp(260.0, 520.0);
+                  return Row(
+                    children: [
+                      Expanded(child: list),
+                      SizedBox(
+                        width: pvW,
+                        child: _PreviewPane(player: _ensurePreview(), name: _previewName),
+                      ),
+                    ],
+                  );
+                },
               );
             },
           ),
