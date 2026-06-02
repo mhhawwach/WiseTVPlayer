@@ -11,11 +11,13 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/image_cache_manager.dart';
 import '../../core/utils/rating.dart';
 import '../../core/utils/year_parser.dart';
+import '../../core/widgets/color_shortcut_bar.dart';
 import '../../core/widgets/focusable_card.dart';
 import '../../core/widgets/loading_grid.dart';
 import '../../data/models/live_category.dart';
 import '../../data/models/series_stream.dart';
 import '../../services/xtream_service.dart';
+import '../favourites/favourites_screen.dart';
 import 'series_categories_screen.dart' show seriesCategoriesProvider;
 
 // ── Sort mode ─────────────────────────────────────────────────────────────────
@@ -50,6 +52,38 @@ class SeriesListScreen extends ConsumerStatefulWidget {
 class _SeriesListScreenState extends ConsumerState<SeriesListScreen> {
   String _search  = '';
   _SortMode _sort = _SortMode.defaultOrder;
+
+  // Colour-shortcut plumbing: search (red), sort (blue), favourite the
+  // highlighted poster (yellow). `_focused` tracks the focused card cheaply.
+  final FocusNode _searchFocus = FocusNode();
+  final GlobalKey<PopupMenuButtonState<_SortMode>> _sortKey = GlobalKey();
+  SeriesStream? _focused;
+
+  @override
+  void dispose() {
+    _searchFocus.dispose();
+    super.dispose();
+  }
+
+  void _favouriteFocused() {
+    final s = _focused;
+    if (s == null) return;
+    StorageService.toggleFavourite('series', s.seriesId, {
+      'type': 'series', 'id': s.seriesId, 'name': s.name, 'icon': s.cover,
+    });
+    final added = StorageService.isFavourite('series', s.seriesId);
+    setState(() {});
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(
+        content: Text(added ? '★ Added to Favourites' : 'Removed from Favourites'),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ));
+  }
+
+  void _openFavourites() => Navigator.of(context)
+      .push(MaterialPageRoute(builder: (_) => const FavouritesScreen()));
 
   String _sortLabel(_SortMode m, AppStrings s) => switch (m) {
         _SortMode.defaultOrder  => s.sortDefault,
@@ -125,6 +159,7 @@ class _SeriesListScreenState extends ConsumerState<SeriesListScreen> {
         title: Text(widget.categoryName),
         actions: [
           PopupMenuButton<_SortMode>(
+            key: _sortKey,
             icon: const Icon(Icons.sort_rounded, size: 22),
             tooltip: 'Sort',
             initialValue: _sort,
@@ -151,6 +186,7 @@ class _SeriesListScreenState extends ConsumerState<SeriesListScreen> {
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
             child: TextField(
+              focusNode: _searchFocus,
               onChanged: (v) => setState(() => _search = v.toLowerCase()),
               decoration: InputDecoration(
                 hintText: s.searchSeriesHint,
@@ -162,40 +198,52 @@ class _SeriesListScreenState extends ConsumerState<SeriesListScreen> {
           ),
         ),
       ),
-      body: async.when(
-        loading: () => const LoadingGrid(aspectRatio: 0.7),
-        error: (e, _) => Center(
-            child: Text(e.toString(),
-                style: const TextStyle(color: AppColors.textSecondary))),
-        data: (seriesList) {
-          final filtered = _process(seriesList, langBlocked);
-          if (filtered.isEmpty) {
-            return Center(
-              child: Text(s.noSeriesFound,
-                  style: const TextStyle(color: AppColors.textSecondary)),
-            );
-          }
+      body: ColorShortcuts(
+        onSearch: () => _searchFocus.requestFocus(),
+        onSort: () => _sortKey.currentState?.showButtonMenu(),
+        onFavouriteKey: _favouriteFocused,
+        onFavouriteTap: _openFavourites,
+        child: async.when(
+          loading: () => const LoadingGrid(aspectRatio: 0.7),
+          error: (e, _) => Center(
+              child: Text(e.toString(),
+                  style: const TextStyle(color: AppColors.textSecondary))),
+          data: (seriesList) {
+            final filtered = _process(seriesList, langBlocked);
+            if (filtered.isEmpty) {
+              return Center(
+                child: Text(s.noSeriesFound,
+                    style: const TextStyle(color: AppColors.textSecondary)),
+              );
+            }
+            _focused ??= filtered.first;
 
-          final cols = MediaQuery.of(context).size.width > 900 ? 6 : 3;
-          return GridView.builder(
-            padding: const EdgeInsets.fromLTRB(10, 8, 10, 100),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: cols,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              childAspectRatio: 0.62,
-            ),
-            itemCount: filtered.length,
-            itemBuilder: (_, i) => _PosterCard(
-              key: ValueKey(filtered[i].seriesId),
-              name: filtered[i].name,
-              imageUrl: filtered[i].cover,
-              rating: filtered[i].rating,
-              autofocus: i == 0,
-              onTap: () => context.go('/series/detail', extra: filtered[i]),
-            ),
-          );
-        },
+            final cols = MediaQuery.of(context).size.width > 900 ? 6 : 3;
+            return GridView.builder(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 100),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: cols,
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+                childAspectRatio: 0.62,
+              ),
+              itemCount: filtered.length,
+              itemBuilder: (_, i) => _PosterCard(
+                key: ValueKey(filtered[i].seriesId),
+                name: filtered[i].name,
+                imageUrl: filtered[i].cover,
+                rating: filtered[i].rating,
+                autofocus: i == 0,
+                isFavourite:
+                    StorageService.isFavourite('series', filtered[i].seriesId),
+                onFocus: (f) {
+                  if (f) _focused = filtered[i];
+                },
+                onTap: () => context.go('/series/detail', extra: filtered[i]),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -211,6 +259,8 @@ class _PosterCard extends StatelessWidget {
     required this.rating,
     required this.autofocus,
     required this.onTap,
+    this.isFavourite = false,
+    this.onFocus,
   });
 
   final String name;
@@ -218,6 +268,8 @@ class _PosterCard extends StatelessWidget {
   final String rating;
   final bool autofocus;
   final VoidCallback onTap;
+  final bool isFavourite;
+  final ValueChanged<bool>? onFocus;
 
   @override
   Widget build(BuildContext context) {
@@ -227,6 +279,7 @@ class _PosterCard extends StatelessWidget {
     return FocusableCard(
       autofocus: autofocus,
       onPressed: onTap,
+      onFocusChange: onFocus,
       borderRadius: 10,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(10),
@@ -273,6 +326,21 @@ class _PosterCard extends StatelessWidget {
                 ),
               ),
             ),
+
+            // Favourite star (top-left) — set via the yellow remote button.
+            if (isFavourite)
+              Positioned(
+                top: 6, left: 6,
+                child: Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.65),
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: const Icon(Icons.star_rounded,
+                      color: Color(0xFFFBC02D), size: 14),
+                ),
+              ),
 
             // Rating badge
             if (hasRating)

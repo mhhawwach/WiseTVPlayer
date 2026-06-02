@@ -440,9 +440,11 @@ class _ChannelList extends StatelessWidget {
   /// Fired when a channel row gains focus (drives the live mini-preview).
   final ValueChanged<LiveStream>? onChannelFocus;
 
-  /// Fired just before navigating to the fullscreen player (lets the caller
-  /// stop the preview so two decoders don't run at once).
-  final VoidCallback? onChannelOpen;
+  /// Called when a channel is opened. Returns the warmed-up preview player to
+  /// hand off to the fullscreen screen for a seamless, re-buffer-free entry —
+  /// or null to open the stream fresh. Also stops the preview when not handing
+  /// off, so two decoders never run at once.
+  final AppPlayer? Function(LiveStream ch)? onChannelOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -464,7 +466,7 @@ class _ChannelList extends StatelessWidget {
           autofocus: autofocusFirst && i == 0,
           onFocus: onChannelFocus,
           onTap: () {
-            onChannelOpen?.call();
+            final warm = onChannelOpen?.call(ch);
             final id = StorageService.activePlaylistId!;
             final playlist = StorageService.getPlaylist(id)!;
             context.push('/player/live',
@@ -473,6 +475,7 @@ class _ChannelList extends StatelessWidget {
                   playlist: playlist,
                   channelList: allChannels,
                   initialIndex: allChannels.indexOf(ch),
+                  warmPlayer: warm,
                 ));
           },
         );
@@ -906,10 +909,25 @@ class _LiveRightPaneState extends ConsumerState<_LiveRightPane> {
     });
   }
 
-  void _stopPreview() {
+  /// Called when a channel is opened fullscreen. If the preview is *already
+  /// playing this exact channel*, relinquish ownership of that warmed-up player
+  /// and return it so the fullscreen screen can adopt it (seamless, no
+  /// re-buffer). Otherwise just stop the preview and return null (fresh open).
+  AppPlayer? _handoffForOpen(LiveStream ch) {
     _previewTimer?.cancel();
+    if (_preview != null && _previewId == ch.streamId) {
+      final warm = _preview;
+      // Drop our reference WITHOUT disposing — the fullscreen player owns it
+      // now. Rebuild so the (now-detached) preview pane spins up a fresh,
+      // empty player rather than rendering the handed-off one twice.
+      _preview = null;
+      _previewId = null;
+      setState(() {});
+      return warm;
+    }
     _previewId = null;
     _preview?.pause();
+    return null;
   }
 
   @override
@@ -976,7 +994,7 @@ class _LiveRightPaneState extends ConsumerState<_LiveRightPane> {
                 allChannels: channels,
                 autofocusFirst: false,
                 onChannelFocus: wide ? _schedulePreview : null,
-                onChannelOpen: wide ? _stopPreview : null,
+                onChannelOpen: wide ? _handoffForOpen : null,
               );
               if (!wide) return list;
               // Proportional preview width so it fits both 960-logical TVs and

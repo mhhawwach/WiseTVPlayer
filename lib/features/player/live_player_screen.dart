@@ -24,11 +24,19 @@ class LivePlayerArgs {
   final List<LiveStream> channelList;
   final int initialIndex;
 
+  /// When the user opens a channel that is already playing in the live
+  /// mini-preview, the preview's warmed-up player instance is handed off here.
+  /// The fullscreen screen then adopts the same connection/buffer/decoder
+  /// instead of re-opening the stream — so preview → fullscreen is instant,
+  /// with no re-buffer. Null means open the stream fresh (normal entry).
+  final AppPlayer? warmPlayer;
+
   const LivePlayerArgs({
     required this.stream,
     required this.playlist,
     required this.channelList,
     required this.initialIndex,
+    this.warmPlayer,
   });
 }
 
@@ -82,9 +90,20 @@ class _LivePlayerScreenState extends State<LivePlayerScreen>
     });
 
     _currentIndex = widget.args.initialIndex;
-    // 8 MB buffer — optimised for fast channel switching on live TV
-    _player = PlayerFactory.create(bufferSize: 8 * 1024 * 1024);
-    _play(_currentIndex);
+    final warm = widget.args.warmPlayer;
+    if (warm != null) {
+      // Seamless hand-off: adopt the preview's already-playing player. Same
+      // connection / buffer / decoder, just expanded to full size with the
+      // controls shown — no reconnect, no re-buffer. (Channel-surfing with
+      // Up/Down from here still re-opens per channel, which is expected.)
+      _player = warm;
+      _player.play();
+      _play(_currentIndex, skipOpen: true);
+    } else {
+      // 8 MB buffer — optimised for fast channel switching on live TV
+      _player = PlayerFactory.create(bufferSize: 8 * 1024 * 1024);
+      _play(_currentIndex);
+    }
     _scheduleHideControls();
     // Controls start visible — land the D-pad on a neutral control so the
     // remote can immediately reach Stats / tracks / aspect.
@@ -131,11 +150,11 @@ class _LivePlayerScreenState extends State<LivePlayerScreen>
   void _enterImmersive() =>
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
-  void _play(int index) {
+  void _play(int index, {bool skipOpen = false}) {
     final ch  = widget.args.channelList[index];
     final url = widget.args.playlist.liveStreamUrl(ch.streamId.toString(), 'ts');
     _currentStreamUrl = url;
-    _player.open(url);
+    if (!skipOpen) _player.open(url);
     StorageService.saveHistory({
       'type': 'live',
       'id': ch.streamId,
