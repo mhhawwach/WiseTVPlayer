@@ -227,6 +227,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen>
       'type': 'live', 'id': ch.streamId, 'name': ch.name, 'icon': ch.streamIcon,
     });
     final fav = StorageService.isFavourite('live', ch.streamId);
+    if (mounted) setState(() {}); // refresh the on-screen star
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
       ..showSnackBar(SnackBar(
@@ -328,6 +329,9 @@ class _LivePlayerScreenState extends State<LivePlayerScreen>
                       showPip: _pipSupported,
                       statsActive: _statsVisible,
                       defaultFocusNode: _defaultControlFocus,
+                      isFavourite:
+                          StorageService.isFavourite('live', ch.streamId),
+                      onFavourite: () => _toggleFavourite(ch),
                       onCycleAspect: () =>
                           setState(() => _aspectMode = _aspectMode.next),
                       onTrackPicker: _showTrackPicker,
@@ -385,6 +389,8 @@ class _LiveControls extends StatelessWidget {
     required this.showPip,
     required this.statsActive,
     required this.defaultFocusNode,
+    required this.isFavourite,
+    required this.onFavourite,
     required this.onCycleAspect,
     required this.onTrackPicker,
     required this.onEpg,
@@ -400,6 +406,8 @@ class _LiveControls extends StatelessWidget {
   final bool showPip;
   final bool statsActive;
   final FocusNode defaultFocusNode;
+  final bool isFavourite;
+  final VoidCallback onFavourite;
   final VoidCallback onCycleAspect;
   final VoidCallback onTrackPicker;
   final VoidCallback? onEpg;
@@ -466,6 +474,16 @@ class _LiveControls extends StatelessWidget {
                             fontWeight: FontWeight.w700)),
                   ),
                   const SizedBox(width: 8),
+                  PlayerControlButton(
+                    icon: isFavourite
+                        ? Icons.star_rounded
+                        : Icons.star_border_rounded,
+                    iconColor:
+                        isFavourite ? const Color(0xFFFBC02D) : Colors.white,
+                    tooltip: isFavourite ? 'Remove favourite' : 'Favourite',
+                    onPressed: onFavourite,
+                  ),
+                  const SizedBox(width: 4),
                   AspectModeButton(mode: aspectMode, onCycle: onCycleAspect),
                   const SizedBox(width: 4),
                   PlayerControlButton(

@@ -62,6 +62,12 @@
   // ── Home menu ──────────────────────────────────────────────────────────────────
   function num(x) { var n = parseFloat(x); return isNaN(n) ? 0 : n; }
 
+  // Shows a ★ badge on the poster art when the item is saved (parity with the
+  // Flutter grids). type: 'vod' | 'series' | 'live'.
+  function addFavBadge(art, type, id) {
+    if (Store.isFav(type, id)) art.appendChild(el('div', { class: 'fav-badge', text: '★' }));
+  }
+
   function posterCard(section, it) {
     var img = section === 'series' ? it.cover : it.stream_icon;
     var art = el('div', { class: 'art' }, el('div', { class: 'ph', text: '🎞' }));
@@ -71,6 +77,8 @@
       im.onload = function () { var ph = art.querySelector('.ph'); if (ph) ph.remove(); };
       art.appendChild(im);
     }
+    addFavBadge(art, section === 'series' ? 'series' : 'vod',
+      section === 'series' ? it.series_id : it.stream_id);
     return el('div', { class: 'poster focusable', onclick: function () { openItem(section, it); } }, [art, el('div', { class: 'cap', text: it.name })]);
   }
 
@@ -273,6 +281,8 @@
         im.onload = function () { var ph = art.querySelector('.ph'); if (ph) ph.remove(); };
         art.appendChild(im);
       }
+      addFavBadge(art, isLive ? 'live' : (section === 'movies' ? 'vod' : 'series'),
+        section === 'series' ? it.series_id : it.stream_id);
       var c = el('div', { class: 'poster focusable' + (isLive ? ' chan' : ''), onclick: function () { openItem(section, it); } }, [
         art, el('div', { class: 'cap', text: name })
       ]);
@@ -360,6 +370,7 @@
       var r = el('div', { class: 'crow focusable', onclick: function () { openFull(ch); } }, [
         el('div', { class: 'cnum', text: '' + (idx + 1) }), logo, el('div', { class: 'cname', text: ch.name })
       ]);
+      if (Store.isFav('live', ch.stream_id)) r.appendChild(el('div', { class: 'crow-fav', text: '★' }));
       if (idx === 0) r.setAttribute('data-autofocus', '1');
       r._onFocus = function () { schedule(ch); if (idx >= rendered - 16) renderMore(); };
       return r;

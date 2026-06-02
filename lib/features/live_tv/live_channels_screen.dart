@@ -11,6 +11,7 @@ import '../../core/storage/category_prefs_notifier.dart';
 import '../../core/storage/storage_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/category_grid.dart';
+import '../../core/widgets/color_shortcut_bar.dart';
 import '../../core/widgets/focusable_card.dart';
 import '../../core/widgets/loading_grid.dart';
 import '../../core/widgets/tv_focus.dart';
@@ -18,6 +19,7 @@ import '../../data/models/epg_listing.dart';
 import '../../data/models/live_category.dart';
 import '../../data/models/live_stream.dart';
 import '../../features/epg/epg_panel.dart';
+import '../../features/favourites/favourites_screen.dart';
 import '../../features/player/live_player_screen.dart';
 import '../../features/player/widgets/aspect_mode.dart';
 import '../../features/live_tv/catch_up_panel.dart';
@@ -752,11 +754,15 @@ class _LiveTwoPaneScreenState extends ConsumerState<LiveTwoPaneScreen> {
 
   // Reliably land focus on the first category once the (async) list is ready.
   final FocusNode _firstCatFocus = FocusNode(debugLabel: 'live-first-cat');
+  // Search field uses the escape node so Down drops into the category list
+  // instead of trapping the D-pad on the box.
+  final FocusNode _searchFocus = searchEscapeFocusNode();
   bool _didInitialFocus = false;
 
   @override
   void dispose() {
     _firstCatFocus.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -824,6 +830,7 @@ class _LiveTwoPaneScreenState extends ConsumerState<LiveTwoPaneScreen> {
                       Padding(
                         padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
                         child: TextField(
+                          focusNode: _searchFocus,
                           onChanged: (v) =>
                               setState(() => _search = v.toLowerCase()),
                           textInputAction: TextInputAction.search,
@@ -865,6 +872,7 @@ class _LiveTwoPaneScreenState extends ConsumerState<LiveTwoPaneScreen> {
                   search: _search,
                   sort: _sort,
                   onSort: (m) => setState(() => _sort = m),
+                  onSearch: () => _searchFocus.requestFocus(),
                 ),
               ),
             ],
@@ -882,6 +890,7 @@ class _LiveRightPane extends ConsumerStatefulWidget {
     required this.search,
     required this.sort,
     required this.onSort,
+    required this.onSearch,
   });
 
   final String catId;
@@ -889,6 +898,7 @@ class _LiveRightPane extends ConsumerStatefulWidget {
   final String search;
   final _SortMode sort;
   final ValueChanged<_SortMode> onSort;
+  final VoidCallback onSearch;
 
   @override
   ConsumerState<_LiveRightPane> createState() => _LiveRightPaneState();
@@ -903,7 +913,32 @@ class _LiveRightPaneState extends ConsumerState<_LiveRightPane> {
   int? _previewId;
   String _previewName = '';
 
+  // Tracks the highlighted channel so the yellow shortcut can favourite it,
+  // and a key so the blue shortcut can open the sort menu.
+  LiveStream? _focusedChannel;
+  final GlobalKey<PopupMenuButtonState<_SortMode>> _sortKey = GlobalKey();
+
   AppPlayer _ensurePreview() => _preview ??= PlayerFactory.create();
+
+  void _favouriteFocused() {
+    final ch = _focusedChannel;
+    if (ch == null) return;
+    StorageService.toggleFavourite('live', ch.streamId, {
+      'type': 'live', 'id': ch.streamId, 'name': ch.name, 'icon': ch.streamIcon,
+    });
+    final added = StorageService.isFavourite('live', ch.streamId);
+    if (mounted) setState(() {});
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(
+        content: Text(added ? '★ Added to Favourites' : 'Removed from Favourites'),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ));
+  }
+
+  void _openFavourites() => Navigator.of(context)
+      .push(MaterialPageRoute(builder: (_) => const FavouritesScreen()));
 
   void _schedulePreview(LiveStream ch) {
     if (_previewId == ch.streamId) return;
@@ -978,6 +1013,7 @@ class _LiveRightPaneState extends ConsumerState<_LiveRightPane> {
                 ),
               ),
               PopupMenuButton<_SortMode>(
+                key: _sortKey,
                 icon: const Icon(Icons.sort_rounded, size: 22),
                 tooltip: 'Sort',
                 initialValue: widget.sort,
@@ -990,7 +1026,12 @@ class _LiveRightPaneState extends ConsumerState<_LiveRightPane> {
           ),
         ),
         Expanded(
-          child: channelsAsync.when(
+          child: ColorShortcuts(
+            onSearch: widget.onSearch,
+            onSort: () => _sortKey.currentState?.showButtonMenu(),
+            onFavouriteKey: _favouriteFocused,
+            onFavouriteTap: _openFavourites,
+            child: channelsAsync.when(
             loading: () => const LoadingGrid(aspectRatio: 1.55),
             error: (e, _) => Center(
               child: Text(e.toString(),
@@ -1003,7 +1044,10 @@ class _LiveRightPaneState extends ConsumerState<_LiveRightPane> {
                 channels: filtered,
                 allChannels: channels,
                 autofocusFirst: false,
-                onChannelFocus: wide ? _schedulePreview : null,
+                onChannelFocus: (ch) {
+                  _focusedChannel = ch;
+                  if (wide) _schedulePreview(ch);
+                },
                 onChannelOpen: wide ? _handoffForOpen : null,
               );
               if (!wide) return list;
@@ -1024,6 +1068,7 @@ class _LiveRightPaneState extends ConsumerState<_LiveRightPane> {
                 },
               );
             },
+          ),
           ),
         ),
       ],
