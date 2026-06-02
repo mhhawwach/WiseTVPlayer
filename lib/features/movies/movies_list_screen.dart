@@ -14,6 +14,7 @@ import '../../core/utils/year_parser.dart';
 import '../../core/widgets/color_shortcut_bar.dart';
 import '../../core/widgets/focusable_card.dart';
 import '../../core/widgets/loading_grid.dart';
+import '../../core/widgets/tv_focus.dart';
 import '../../data/models/live_category.dart';
 import '../../data/models/vod_stream.dart';
 import '../../services/xtream_service.dart';
@@ -59,7 +60,7 @@ class _MoviesListScreenState extends ConsumerState<MoviesListScreen> {
   // Colour-shortcut plumbing: jump to search (red), open the sort menu (blue),
   // favourite the highlighted poster (yellow). `_focused` tracks the focused
   // card without rebuilding the grid on every D-pad move.
-  final FocusNode _searchFocus = FocusNode();
+  final FocusNode _searchFocus = searchEscapeFocusNode();
   final GlobalKey<PopupMenuButtonState<_SortMode>> _sortKey = GlobalKey();
   VodStream? _focused;
 

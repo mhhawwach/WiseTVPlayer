@@ -13,6 +13,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/category_grid.dart';
 import '../../core/widgets/focusable_card.dart';
 import '../../core/widgets/loading_grid.dart';
+import '../../core/widgets/tv_focus.dart';
 import '../../data/models/epg_listing.dart';
 import '../../data/models/live_category.dart';
 import '../../data/models/live_stream.dart';
@@ -77,6 +78,8 @@ class _LiveChannelsScreenState extends ConsumerState<LiveChannelsScreen> {
   // Default to the distinctive now/next list view; users can toggle to grid.
   _ViewMode _view = _ViewMode.list;
 
+  final FocusNode _searchFocus = searchEscapeFocusNode();
+
   static const _viewKey = 'live_view_mode';
 
   @override
@@ -84,6 +87,12 @@ class _LiveChannelsScreenState extends ConsumerState<LiveChannelsScreen> {
     super.initState();
     final saved = StorageService.getSetting<String>(_viewKey);
     if (saved == 'grid') _view = _ViewMode.grid;
+  }
+
+  @override
+  void dispose() {
+    _searchFocus.dispose();
+    super.dispose();
   }
 
   void _toggleView() {
@@ -157,6 +166,7 @@ class _LiveChannelsScreenState extends ConsumerState<LiveChannelsScreen> {
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
             child: TextField(
+              focusNode: _searchFocus,
               onChanged: (v) => setState(() => _search = v.toLowerCase()),
               decoration: const InputDecoration(
                 hintText: 'Search channels...',

@@ -46,17 +46,12 @@ class _ProfilesScreenState extends ConsumerState<ProfilesScreen> {
               // non-active card put multiple autofocus:true in one scope, so
               // the initial highlight landed unpredictably / looked missing.
               autofocus: i == 0,
-              onSwitch: () async {
-                if (p.id == activeId) return;
-                await ref.read(profileProvider.notifier).switchProfile(p.id);
-                ref.read(categoryPrefsProvider.notifier).reload();
-                ref.read(languagePrefsProvider.notifier).reload();
-                if (context.mounted) context.go('/home');
-              },
-              onEdit: () => _showEditDialog(context, ref, s, p),
-              onDelete: profiles.length > 1
-                  ? () => _confirmDelete(context, ref, s, p)
-                  : null,
+              // OK opens an actions sheet (Switch / Edit / Delete). Previously
+              // these were tiny trailing icon buttons that a D-pad couldn't
+              // reach inside the tile's full-width InkWell — so Delete was
+              // effectively unreachable on the TV.
+              onOpen: () => _showActions(context, ref, s, p,
+                  isActive: p.id == activeId, canDelete: profiles.length > 1),
             );
           }),
 
@@ -155,6 +150,7 @@ class _ProfilesScreenState extends ConsumerState<ProfilesScreen> {
         ),
         actions: [
           TextButton(
+              autofocus: true, // ensure the dialog has D-pad focus on a TV
               onPressed: () => Navigator.pop(ctx, false),
               child: Text(s.cancel)),
           TextButton(
@@ -172,6 +168,90 @@ class _ProfilesScreenState extends ConsumerState<ProfilesScreen> {
       if (mounted) setState(() {}); // remove the deleted card immediately
     }
   }
+
+  // ── Actions sheet (Switch / Edit / Delete) ───────────────────────────────────
+  // A reliable, D-pad-reachable replacement for the old tiny trailing icons,
+  // which were unreachable inside the tile's full-width InkWell on a TV.
+  void _showActions(
+    BuildContext context,
+    WidgetRef ref,
+    AppStrings s,
+    Profile p, {
+    required bool isActive,
+    required bool canDelete,
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 10),
+              child: Row(
+                children: [
+                  _Avatar(profile: p, size: 40),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(p.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700)),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            if (!isActive)
+              ListTile(
+                autofocus: true,
+                leading: Icon(Icons.play_circle_outline_rounded,
+                    color: AppColors.primary),
+                title: const Text('Switch to this profile',
+                    style: TextStyle(color: AppColors.textPrimary)),
+                onTap: () async {
+                  Navigator.pop(sheetCtx);
+                  await ref.read(profileProvider.notifier).switchProfile(p.id);
+                  ref.read(categoryPrefsProvider.notifier).reload();
+                  ref.read(languagePrefsProvider.notifier).reload();
+                  if (context.mounted) context.go('/home');
+                },
+              ),
+            ListTile(
+              autofocus: isActive,
+              leading: const Icon(Icons.edit_outlined,
+                  color: AppColors.textSecondary),
+              title: const Text('Edit',
+                  style: TextStyle(color: AppColors.textPrimary)),
+              onTap: () {
+                Navigator.pop(sheetCtx);
+                _showEditDialog(context, ref, s, p);
+              },
+            ),
+            if (canDelete)
+              ListTile(
+                leading: Icon(Icons.delete_outline_rounded,
+                    color: Colors.red.withValues(alpha: 0.85)),
+                title: const Text('Delete',
+                    style: TextStyle(color: Colors.redAccent)),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  _confirmDelete(context, ref, s, p);
+                },
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -183,17 +263,13 @@ class _ProfileCard extends StatelessWidget {
     required this.profile,
     required this.isActive,
     required this.autofocus,
-    required this.onSwitch,
-    required this.onEdit,
-    this.onDelete,
+    required this.onOpen,
   });
 
   final Profile     profile;
   final bool        isActive;
   final bool        autofocus;
-  final VoidCallback onSwitch;
-  final VoidCallback onEdit;
-  final VoidCallback? onDelete;
+  final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -214,21 +290,26 @@ class _ProfileCard extends StatelessWidget {
         ),
       ),
       child: ListTile(
-        // The whole row switches profile (easy D-pad OK target on TV).
-        onTap: isActive ? null : onSwitch,
+        // OK on the whole card opens the actions sheet — one clean D-pad target
+        // (the old per-icon buttons weren't reachable by remote inside the tile).
+        onTap: onOpen,
         autofocus: autofocus,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         leading: _Avatar(profile: profile, size: 44),
         title: Row(
           children: [
-            Text(
-              profile.name,
-              style: TextStyle(
-                color: isActive ? color : AppColors.textPrimary,
-                fontWeight:
-                    isActive ? FontWeight.w700 : FontWeight.w500,
-                fontSize: 15,
+            Flexible(
+              child: Text(
+                profile.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: isActive ? color : AppColors.textPrimary,
+                  fontWeight:
+                      isActive ? FontWeight.w700 : FontWeight.w500,
+                  fontSize: 15,
+                ),
               ),
             ),
             if (profile.isKidsMode) ...[
@@ -257,35 +338,8 @@ class _ProfileCard extends StatelessWidget {
                 style: TextStyle(
                     color: color, fontSize: 12, fontWeight: FontWeight.w600))
             : null,
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (!isActive)
-              TextButton(
-                onPressed: onSwitch,
-                style: TextButton.styleFrom(
-                  foregroundColor: color,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  textStyle: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600),
-                ),
-                child: const Text('Switch'),
-              ),
-            IconButton(
-              icon: const Icon(Icons.edit_outlined, size: 20),
-              color: AppColors.textSecondary,
-              onPressed: onEdit,
-              tooltip: 'Edit',
-            ),
-            if (onDelete != null)
-              IconButton(
-                icon: const Icon(Icons.delete_outline_rounded, size: 20),
-                color: Colors.red.withValues(alpha: 0.7),
-                onPressed: onDelete,
-                tooltip: 'Delete',
-              ),
-          ],
-        ),
+        trailing:
+            const Icon(Icons.more_vert_rounded, color: AppColors.textSecondary),
       ),
     );
   }

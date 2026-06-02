@@ -8,6 +8,7 @@ import '../../core/storage/storage_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/rating.dart';
 import '../../core/widgets/dpad_scrollable.dart';
+import '../../core/widgets/favourite_button.dart';
 import '../../data/models/vod_stream.dart';
 import '../../features/player/vod_player_screen.dart';
 import '../../services/xtream_service.dart';
@@ -245,6 +246,16 @@ class _NarrowContent extends StatelessWidget {
             ),
           ),
 
+          // Favourite (D-pad reachable — works on remotes without colour keys)
+          const SizedBox(height: 10),
+          FavouriteButton(
+            type: 'vod',
+            id: vod.streamId,
+            name: vod.name,
+            icon: vod.streamIcon,
+            ext: vod.containerExtension,
+          ),
+
           // Watch Trailer button — shown once info is loaded and trailer exists
           if (trailerUrl.isNotEmpty) ...[
             const SizedBox(height: 10),
@@ -322,8 +333,12 @@ class _WideContent extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Button row: Play + optional Trailer
-                Row(
+                // Button row: Play + Favourite + optional Trailer.
+                // Wrap (not Row) so the buttons reflow instead of overflowing
+                // on narrower "wide" widths.
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
                   children: [
                     SizedBox(
                       width: 180,
@@ -347,8 +362,15 @@ class _WideContent extends StatelessWidget {
                         ),
                       ),
                     ),
-                    if (trailerUrl.isNotEmpty) ...[
-                      const SizedBox(width: 10),
+                    FavouriteButton(
+                      width: 170,
+                      type: 'vod',
+                      id: vod.streamId,
+                      name: vod.name,
+                      icon: vod.streamIcon,
+                      ext: vod.containerExtension,
+                    ),
+                    if (trailerUrl.isNotEmpty)
                       SizedBox(
                         width: 160,
                         child: OutlinedButton.icon(
@@ -368,7 +390,6 @@ class _WideContent extends StatelessWidget {
                           ),
                         ),
                       ),
-                    ],
                   ],
                 ),
 

@@ -8,6 +8,7 @@ import '../../core/storage/storage_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/rating.dart';
 import '../../core/widgets/dpad_scrollable.dart';
+import '../../core/widgets/favourite_button.dart';
 import '../../core/widgets/focusable_card.dart';
 import '../../data/models/series_stream.dart';
 import '../../features/player/series_player_screen.dart';
@@ -385,6 +386,16 @@ class _SeriesBody extends StatelessWidget {
             ),
           ),
         ],
+
+        // ── Favourite (D-pad reachable — works without colour keys) ──────────
+        const SizedBox(height: 14),
+        FavouriteButton(
+          width: 180,
+          type: 'series',
+          id: series.seriesId,
+          name: series.name,
+          icon: series.cover,
+        ),
 
         // ── Watch Trailer button ─────────────────────────────────────────────
         if (series.youtubeTrailer.isNotEmpty) ...[
