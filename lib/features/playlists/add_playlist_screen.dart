@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/storage/storage_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/tv_text_field.dart';
 import '../../data/models/playlist.dart';
 import '../../services/xtream_service.dart';
 
@@ -229,21 +230,20 @@ class _AddPlaylistScreenState extends ConsumerState<AddPlaylistScreen> {
     TextInputAction textInputAction = TextInputAction.next,
     VoidCallback? onSubmitted,
   }) {
-    return TextFormField(
+    // TvTextField stays read-only (no keyboard) while the D-pad moves over it,
+    // and opens the keyboard on OK — so the field navigates cleanly on a TV
+    // remote instead of trapping the user under the on-screen keyboard.
+    return TvTextField(
       controller: ctrl,
+      label: label,
+      icon: icon,
+      hint: hint,
+      obscure: obscure,
+      keyboardType: keyboardType,
       focusNode: focusNode,
       autofocus: autofocus,
-      obscureText: obscure,
-      keyboardType: keyboardType,
       textInputAction: textInputAction,
-      onFieldSubmitted: (_) => onSubmitted?.call(),
-      style: const TextStyle(color: AppColors.textPrimary),
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        prefixIcon: Icon(icon, color: AppColors.textMuted),
-        labelStyle: const TextStyle(color: AppColors.textSecondary),
-      ),
+      onSubmitted: onSubmitted,
       validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
     );
   }

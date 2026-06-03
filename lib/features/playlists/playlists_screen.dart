@@ -66,6 +66,7 @@ class PlaylistsScreen extends ConsumerWidget {
                 return _PlaylistTile(
                   playlist: p,
                   isActive: p.id == activeId,
+                  autofocus: i == 0, // land the D-pad highlight on the first tile
                   onTap: () {
                     if (p.id == activeId) {
                       context.go('/home');
@@ -104,12 +105,14 @@ class _PlaylistTile extends StatelessWidget {
     required this.isActive,
     required this.onTap,
     required this.onDelete,
+    this.autofocus = false,
   });
 
   final Playlist playlist;
   final bool isActive;
   final VoidCallback onTap;
   final VoidCallback onDelete;
+  final bool autofocus;
 
   @override
   Widget build(BuildContext context) {
@@ -120,6 +123,7 @@ class _PlaylistTile extends StatelessWidget {
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
+        autofocus: autofocus,
         borderRadius: BorderRadius.circular(12),
         child: Container(
           decoration: BoxDecoration(
@@ -237,6 +241,7 @@ class _EmptyPlaylists extends StatelessWidget {
           const SizedBox(height: 24),
           ElevatedButton.icon(
             onPressed: onAdd,
+            autofocus: true,
             icon: const Icon(Icons.add),
             label: const Text('Add Playlist'),
           ),
