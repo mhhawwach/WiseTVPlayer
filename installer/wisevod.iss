@@ -12,7 +12,7 @@
 ; ─────────────────────────────────────────────────────────────────────────────
 
 #define MyAppName "WiseVodPlayer"
-#define MyAppVersion "1.0.15"
+#define MyAppVersion "1.0.16"
 #define MyAppPublisher "WiseApps"
 #define MyAppExeName "wisetv_player.exe"
 #define ReleaseDir "..\build\windows\x64\runner\Release"
