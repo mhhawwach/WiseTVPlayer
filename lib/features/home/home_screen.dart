@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -406,39 +407,78 @@ class _HeroCard extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // Backdrop image
-          movie.streamIcon.isNotEmpty
-              ? CachedNetworkImage(
-                  imageUrl: movie.streamIcon,
-                  fit: BoxFit.cover,
-                  cacheManager: AppImageCacheManager(),
-                  errorWidget: (_, __, ___) =>
-                      _HeroFallback(name: movie.name),
-                  placeholder: (_, __) =>
-                      _HeroFallback(name: movie.name),
-                )
-              : _HeroFallback(name: movie.name),
+          // Background fill. We only have a portrait poster here (no landscape
+          // backdrop), so covering it into a wide banner crops an ugly zoomed
+          // slice. Instead a blurred, scaled copy fills the space with the
+          // artwork's colours — or a flat fill on low-end TVs (reduce-motion).
+          if (movie.streamIcon.isEmpty)
+            _HeroFallback(name: movie.name)
+          else if (Perf.reduceMotion)
+            ColoredBox(color: AppColors.surfaceVariant)
+          else
+            ClipRect(
+              child: Transform.scale(
+                scale: 1.2,
+                child: ImageFiltered(
+                  imageFilter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                  child: CachedNetworkImage(
+                    imageUrl: movie.streamIcon,
+                    fit: BoxFit.cover,
+                    cacheManager: AppImageCacheManager(),
+                    errorWidget: (_, __, ___) =>
+                        ColoredBox(color: AppColors.surfaceVariant),
+                    placeholder: (_, __) =>
+                        ColoredBox(color: AppColors.surfaceVariant),
+                  ),
+                ),
+              ),
+            ),
 
-          // Bottom gradient
+          // Darken the fill for text contrast.
+          const ColoredBox(color: Color(0x4D000000)),
+
+          // The crisp poster shown at its true 2:3 aspect on the right.
+          if (movie.streamIcon.isNotEmpty)
+            Positioned(
+              top: 18,
+              bottom: 18,
+              right: 22,
+              child: AspectRatio(
+                aspectRatio: 2 / 3,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: CachedNetworkImage(
+                    imageUrl: movie.streamIcon,
+                    fit: BoxFit.cover,
+                    cacheManager: AppImageCacheManager(),
+                    errorWidget: (_, __, ___) => _HeroFallback(name: movie.name),
+                    placeholder: (_, __) =>
+                        ColoredBox(color: AppColors.surfaceVariant),
+                  ),
+                ),
+              ),
+            ),
+
+          // Left→right gradient so the title/buttons stay legible over the art.
           const DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
+                begin: Alignment.bottomLeft,
+                end: Alignment.topRight,
                 colors: [
+                  Color(0xE6000000),
+                  Color(0x66000000),
                   Color(0x00000000),
-                  Color(0x99000000),
-                  Color(0xDD000000),
                 ],
-                stops: [0.35, 0.70, 1.0],
+                stops: [0.0, 0.5, 0.85],
               ),
             ),
           ),
 
-          // Text + play button
+          // Text + play button (kept clear of the poster on the right)
           Positioned(
             left: 20,
-            right: 20,
+            right: 184,
             bottom: 30,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

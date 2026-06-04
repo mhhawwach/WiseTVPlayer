@@ -2,17 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_theme.dart';
+import '../utils/device_utils.dart';
+import 'tv_keyboard.dart';
 
-/// A D-pad-friendly text field for Android TV / remotes.
+/// A text field that adapts to the input device:
 ///
-/// A normal autofocused or traversed `TextField` pops the on-screen keyboard the
-/// instant it gains focus. On many TV boxes that traps the user — the keyboard
-/// fights focus traversal and the D-pad can't cleanly get back out (you can't
-/// even reach the keys). This field stays **read-only** (no keyboard) while the
-/// D-pad is merely moving over it; press **OK / Select** to start typing (the
-/// keyboard opens), and the keyboard's Done — or moving focus away — stops
-/// editing. So you can freely D-pad between fields, and only summon the keyboard
-/// when you actually mean to type.
+/// * **On a TV** (D-pad remote) the system on-screen keyboard often won't hand
+///   the arrows to its keys, so typing is impossible. Here the field is
+///   read-only and pressing **OK** opens an in-app, fully D-pad-navigable
+///   keyboard ([showTvKeyboard]).
+/// * **On desktop / phone** it's a normal editable [TextFormField] — click and
+///   type with the hardware or system keyboard, exactly as before.
 class TvTextField extends StatefulWidget {
   const TvTextField({
     super.key,
@@ -48,48 +48,83 @@ class TvTextField extends StatefulWidget {
 class _TvTextFieldState extends State<TvTextField> {
   late final FocusNode _node = widget.focusNode ?? FocusNode();
   bool _ownsNode = false;
-  bool _editing = false;
+  bool _isTV = DeviceUtils.isTVSync;
+  bool _opening = false;
 
   @override
   void initState() {
     super.initState();
     _ownsNode = widget.focusNode == null;
-    _node.addListener(_onFocusChange);
-  }
-
-  void _onFocusChange() {
-    // Focus left the field (Back closed the keyboard, or the D-pad moved away)
-    // → drop out of editing so the next OK re-opens the keyboard cleanly.
-    if (!_node.hasFocus && _editing && mounted) setState(() => _editing = false);
+    // Correct the TV flag once the (cached) async check resolves.
+    DeviceUtils.isTV.then((tv) {
+      if (mounted && tv != _isTV) setState(() => _isTV = tv);
+    });
   }
 
   @override
   void dispose() {
-    _node.removeListener(_onFocusChange);
     if (_ownsNode) _node.dispose();
     super.dispose();
+  }
+
+  Future<void> _openKeyboard() async {
+    if (_opening) return;
+    _opening = true;
+    final result = await showTvKeyboard(
+      context,
+      title: widget.label,
+      initial: widget.controller.text,
+    );
+    _opening = false;
+    if (result != null && mounted) {
+      widget.controller
+        ..text = result
+        ..selection = TextSelection.collapsed(offset: result.length);
+      setState(() {}); // refresh the on-field display
+      widget.onSubmitted?.call(); // advance to the next field (or submit)
+    }
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent e) {
     if (e is! KeyDownEvent) return KeyEventResult.ignored;
     final k = e.logicalKey;
-    if (!_editing &&
-        (k == LogicalKeyboardKey.select ||
-            k == LogicalKeyboardKey.enter ||
-            k == LogicalKeyboardKey.gameButtonA)) {
-      // The field is already focused; flipping readOnly → false on a focused
-      // field makes Flutter open the keyboard. User-initiated (not at screen
-      // entry), so it opens in a navigable state.
-      setState(() => _editing = true);
+    if (k == LogicalKeyboardKey.select ||
+        k == LogicalKeyboardKey.enter ||
+        k == LogicalKeyboardKey.gameButtonA) {
+      _openKeyboard();
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
   }
 
+  InputDecoration _decoration({String? hintText}) => InputDecoration(
+        labelText: widget.label,
+        hintText: hintText,
+        prefixIcon: widget.icon != null
+            ? Icon(widget.icon, color: AppColors.textMuted)
+            : null,
+        labelStyle: const TextStyle(color: AppColors.textSecondary),
+      );
+
   @override
   Widget build(BuildContext context) {
-    // canRequestFocus:false + skipTraversal so this wrapper never competes for
-    // focus; it only catches OK bubbling up from the focused field.
+    if (!_isTV) {
+      // Desktop / phone — normal editable field (system / hardware keyboard).
+      return TextFormField(
+        controller: widget.controller,
+        focusNode: _node,
+        autofocus: widget.autofocus,
+        obscureText: widget.obscure,
+        keyboardType: widget.keyboardType,
+        textInputAction: widget.textInputAction,
+        onFieldSubmitted: (_) => widget.onSubmitted?.call(),
+        style: const TextStyle(color: AppColors.textPrimary),
+        decoration: _decoration(hintText: widget.hint),
+        validator: widget.validator,
+      );
+    }
+
+    // TV — read-only; OK (or tap) opens the in-app keyboard.
     return Focus(
       canRequestFocus: false,
       skipTraversal: true,
@@ -98,32 +133,12 @@ class _TvTextFieldState extends State<TvTextField> {
         controller: widget.controller,
         focusNode: _node,
         autofocus: widget.autofocus,
-        readOnly: !_editing,
+        readOnly: true,
+        showCursor: false,
         obscureText: widget.obscure,
-        keyboardType: widget.keyboardType,
-        textInputAction: widget.textInputAction,
-        onFieldSubmitted: (_) {
-          setState(() => _editing = false);
-          widget.onSubmitted?.call();
-        },
-        onTapOutside: (_) {
-          if (_editing) setState(() => _editing = false);
-        },
+        onTap: _openKeyboard,
         style: const TextStyle(color: AppColors.textPrimary),
-        decoration: InputDecoration(
-          labelText: widget.label,
-          // When idle, prompt the user to press OK; while editing, show the
-          // real hint.
-          hintText: _editing ? widget.hint : 'Press OK to type',
-          prefixIcon: widget.icon != null
-              ? Icon(widget.icon, color: AppColors.textMuted)
-              : null,
-          suffixIcon: _editing
-              ? Icon(Icons.keyboard_rounded,
-                  size: 18, color: AppColors.primary)
-              : null,
-          labelStyle: const TextStyle(color: AppColors.textSecondary),
-        ),
+        decoration: _decoration(hintText: 'Press OK to type'),
         validator: widget.validator,
       ),
     );
