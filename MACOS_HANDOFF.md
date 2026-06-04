@@ -9,8 +9,7 @@
 ## 0. First moves on the Mac
 ```bash
 git clone https://github.com/mhhawwach/WiseTVPlayer.git
-cd WiseTVPlayer
-git checkout rel-1.0.6          # active branch (default working branch)
+cd WiseTVPlayer                 # 'main' is the default branch — nothing to check out
 flutter --version               # need Flutter 3.44.x (matches what shipped)
 flutter pub get
 cd ios && pod install && cd ..  # CocoaPods required (media_kit has native pods)
@@ -28,7 +27,7 @@ apps** for **LG webOS** (`webos_native/`, packaged as `.ipk`) and **Samsung
 Tizen** (`tizen_native/`, `.wgt`). **iOS has been verified to build but never
 shipped — that's the job here.**
 
-- Repo: `github.com/mhhawwach/WiseTVPlayer`, branch **`rel-1.0.6`**
+- Repo: `github.com/mhhawwach/WiseTVPlayer`, default branch **`main`**
 - Current version: **`1.0.17+18`** (see `pubspec.yaml`)
 - Latest GitHub release: **v1.0.17** (APK + Windows .exe + webOS .ipk)
 - iOS bundle id: **`com.wiseapps.wisetv`**
