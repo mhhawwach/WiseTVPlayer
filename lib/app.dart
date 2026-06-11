@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -34,6 +35,11 @@ class WiseTVPlayerApp extends ConsumerWidget {
     return MaterialApp.router(
       title: 'WiseVodPlayer',
       debugShowCheckedModeBanner: false,
+
+      // Let a mouse / trackpad drag-scroll on desktop & web (Flutter's default
+      // only drag-scrolls with touch), so the horizontal home rows can be
+      // scrolled left/right with a pointer.
+      scrollBehavior: const _AppScrollBehavior(),
 
       // ── Locale & RTL ──────────────────────────────────────────────────────
       locale: locale.locale,
@@ -85,4 +91,20 @@ class WiseTVPlayerApp extends ConsumerWidget {
       routerConfig: router,
     );
   }
+}
+
+/// Adds mouse + trackpad (and stylus) to the drag devices, so pointer drags
+/// scroll lists/rows on desktop and web — not just touch. Mouse-wheel and
+/// trackpad gestures continue to work as before.
+class _AppScrollBehavior extends MaterialScrollBehavior {
+  const _AppScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.trackpad,
+        PointerDeviceKind.stylus,
+        PointerDeviceKind.invertedStylus,
+      };
 }

@@ -145,7 +145,11 @@ class _ProfilesScreenState extends ConsumerState<ProfilesScreen> {
     final wasActive = p.id == StorageService.activeProfileId;
     final ok = await showDialog<bool>(
       context: ctx,
-      builder: (_) => AlertDialog(
+      // Pop with the dialog's OWN context (dialogCtx). showDialog uses the root
+      // navigator, but popping with the screen context targets a nested
+      // navigator — so the dialog never closed and nothing deleted (only Esc,
+      // the dialog's built-in dismiss, worked).
+      builder: (dialogCtx) => AlertDialog(
         backgroundColor: AppColors.card,
         title: Text(s.deleteProfile,
             style: const TextStyle(color: AppColors.textPrimary)),
@@ -155,13 +159,13 @@ class _ProfilesScreenState extends ConsumerState<ProfilesScreen> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
+              onPressed: () => Navigator.pop(dialogCtx, false),
               child: Text(s.cancel)),
           TextButton(
             // The user already chose "Delete" in the actions sheet, so OK here
             // confirms (autofocused so the remote's OK works on a TV).
             autofocus: true,
-            onPressed: () => Navigator.pop(ctx, true),
+            onPressed: () => Navigator.pop(dialogCtx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: Text(s.delete),
           ),
