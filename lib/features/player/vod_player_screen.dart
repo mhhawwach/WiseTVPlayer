@@ -28,8 +28,14 @@ class VodPlayerArgs {
   final String historyType;
 
   /// Called once when the video naturally finishes (position ≥ duration − 5 s).
-  /// Ignored for live / catchup. Series player uses this for auto-play countdown.
+  /// Ignored for live / catchup. Series player uses this to auto-play the next.
   final VoidCallback? onComplete;
+
+  /// Series "Up Next" pill: the label to show ("Next Episode" / "Next Season"),
+  /// or null when there's nothing next. When set, the pill appears in the last
+  /// 3 minutes; OK (controls hidden) or tapping it calls [onNext].
+  final String? nextLabel;
+  final VoidCallback? onNext;
 
   const VodPlayerArgs({
     required this.vod,
@@ -38,6 +44,8 @@ class VodPlayerArgs {
     this.overrideUrl,
     this.historyType = 'vod',
     this.onComplete,
+    this.nextLabel,
+    this.onNext,
   });
 }
 
@@ -77,6 +85,7 @@ class _VodPlayerScreenState extends State<VodPlayerScreen>
   // ── Completion detection ──────────────────────────────────────────────────
   StreamSubscription<Duration>? _completionSub;
   bool _completionFired = false;
+  bool _showNextPill = false; // series "Up Next" pill (last 3 min)
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -135,17 +144,22 @@ class _VodPlayerScreenState extends State<VodPlayerScreen>
       }
     });
 
-    // ── Near-end detection → fire onComplete ─────────────────────────────
-    if (widget.args.onComplete != null) {
+    // ── Position-driven: "Up Next" pill (last 3 min) + completion ────────
+    if (widget.args.onComplete != null || widget.args.nextLabel != null) {
       _completionSub = _player.positionStream.listen((pos) {
-        if (_completionFired) return;
         final dur = _player.state.duration;
+        // Up-next pill in the final 3 minutes.
+        if (widget.args.nextLabel != null && mounted) {
+          final remaining = dur.inSeconds - pos.inSeconds;
+          final show = dur.inSeconds > 0 && remaining > 0 && remaining <= 180;
+          if (show != _showNextPill) setState(() => _showNextPill = show);
+        }
+        // Natural completion → fire onComplete once.
+        if (_completionFired || widget.args.onComplete == null) return;
         if (dur.inSeconds > 30 &&
             pos.inSeconds > 0 &&
             pos.inSeconds >= dur.inSeconds - 5) {
           _completionFired = true;
-          _completionSub?.cancel();
-          _completionSub = null;
           // Mark series episode as watched
           if (widget.args.historyType == 'series') {
             StorageService.markEpisodeWatched(widget.args.vod.streamId);
@@ -296,6 +310,18 @@ class _VodPlayerScreenState extends State<VodPlayerScreen>
             return KeyEventResult.handled;
           }
 
+          // Up-next pill showing + passive watching → OK jumps to the next
+          // episode / season.
+          if (_showNextPill &&
+              !_controlsVisible &&
+              widget.args.onNext != null &&
+              (event.logicalKey == LogicalKeyboardKey.select ||
+                  event.logicalKey == LogicalKeyboardKey.enter ||
+                  event.logicalKey == LogicalKeyboardKey.gameButtonA)) {
+            widget.args.onNext!();
+            return KeyEventResult.handled;
+          }
+
           // Controls hidden: the first key press just wakes them (and moves
           // focus into them). Don't let it leak through to anything else.
           if (!_controlsVisible) {
@@ -352,6 +378,18 @@ class _VodPlayerScreenState extends State<VodPlayerScreen>
                       streamUrl: _streamUrl,
                       onClose: () =>
                           setState(() => _statsVisible = false),
+                    ),
+                  ),
+                ),
+              // ── "Up Next" pill (series, final 3 minutes) ──────────────────
+              if (_showNextPill && !_inPipMode && widget.args.nextLabel != null)
+                Positioned(
+                  right: 24,
+                  bottom: 92,
+                  child: SafeArea(
+                    child: _UpNextPill(
+                      label: widget.args.nextLabel!,
+                      onTap: widget.args.onNext,
                     ),
                   ),
                 ),
@@ -602,6 +640,64 @@ class _PlaybackRow extends StatelessWidget {
           },
         ),
       ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// "Up Next" pill — shown bottom-right in the last 3 minutes of a series episode.
+// Tap (or press OK while the controls are hidden) to jump to the next episode /
+// season. Highlighted so it stands out over the video.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _UpNextPill extends StatelessWidget {
+  const _UpNextPill({required this.label, this.onTap});
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppColors.primary,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: const [
+              BoxShadow(
+                  color: Colors.black54, blurRadius: 18, offset: Offset(0, 6)),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.skip_next_rounded, color: Colors.white, size: 22),
+              const SizedBox(width: 8),
+              Text(label,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700)),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text('OK',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800)),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

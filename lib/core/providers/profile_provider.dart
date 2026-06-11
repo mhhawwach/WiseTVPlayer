@@ -47,6 +47,12 @@ class ProfileNotifier extends StateNotifier<Profile?> {
     bool isKidsMode = false,
     bool switchTo = true,
   }) async {
+    // Playlists are global, but the *active* selection is per-profile. Capture
+    // the current profile's active playlist BEFORE switching so the new profile
+    // inherits one — otherwise it has no active playlist → no content on Home
+    // AND the "customize your experience" language popup can't run (it's gated
+    // on having an active playlist).
+    final inheritPlaylistId = StorageService.activePlaylistId;
     final p = Profile(
       id: 'p_${DateTime.now().millisecondsSinceEpoch}',
       name: name.trim(),
@@ -55,7 +61,16 @@ class ProfileNotifier extends StateNotifier<Profile?> {
       emoji: emoji,
     );
     await StorageService.saveProfile(p);
-    if (switchTo) await switchProfile(p.id);
+    if (switchTo) {
+      await switchProfile(p.id);
+      if (StorageService.activePlaylistId == null) {
+        final pick = inheritPlaylistId ??
+            (StorageService.playlists.isNotEmpty
+                ? StorageService.playlists.first.id
+                : null);
+        if (pick != null) await StorageService.setActivePlaylistId(pick);
+      }
+    }
     // Notify listeners so profile list rebuilds.
     state = StorageService.activeProfile;
     return p;

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/l10n/app_strings.dart';
 import '../../core/language/language_prefs.dart';
+import '../../core/providers/content_refresh.dart';
 import '../../core/providers/profile_provider.dart';
 import '../../core/storage/category_prefs_notifier.dart';
 import '../../core/storage/storage_service.dart';
@@ -103,6 +104,9 @@ class _ProfilesScreenState extends ConsumerState<ProfilesScreen> {
               );
           ref.read(categoryPrefsProvider.notifier).reload();
           ref.read(languagePrefsProvider.notifier).reload();
+          // New profile is now active (with an inherited playlist) — load its
+          // content fresh so Home reflects it and the language popup can run.
+          invalidateAllContent(ref);
           // Dialog closes itself (see _ProfileDialogState._save).
           if (mounted) setState(() {}); // show the new profile immediately
         },
@@ -138,6 +142,7 @@ class _ProfilesScreenState extends ConsumerState<ProfilesScreen> {
 
   Future<void> _confirmDelete(
       BuildContext ctx, WidgetRef ref, AppStrings s, Profile p) async {
+    final wasActive = p.id == StorageService.activeProfileId;
     final ok = await showDialog<bool>(
       context: ctx,
       builder: (_) => AlertDialog(
@@ -150,10 +155,12 @@ class _ProfilesScreenState extends ConsumerState<ProfilesScreen> {
         ),
         actions: [
           TextButton(
-              autofocus: true, // ensure the dialog has D-pad focus on a TV
               onPressed: () => Navigator.pop(ctx, false),
               child: Text(s.cancel)),
           TextButton(
+            // The user already chose "Delete" in the actions sheet, so OK here
+            // confirms (autofocused so the remote's OK works on a TV).
+            autofocus: true,
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: Text(s.delete),
@@ -161,11 +168,17 @@ class _ProfilesScreenState extends ConsumerState<ProfilesScreen> {
         ],
       ),
     );
-    if (ok == true && ctx.mounted) {
-      await ref.read(profileProvider.notifier).deleteProfile(p.id);
-      ref.read(categoryPrefsProvider.notifier).reload();
-      ref.read(languagePrefsProvider.notifier).reload();
-      if (mounted) setState(() {}); // remove the deleted card immediately
+    if (ok != true || !mounted) return;
+    await ref.read(profileProvider.notifier).deleteProfile(p.id);
+    if (mounted) setState(() {}); // remove the deleted card immediately
+    ref.read(categoryPrefsProvider.notifier).reload();
+    ref.read(languagePrefsProvider.notifier).reload();
+    // Deleting the active profile switches to another → refresh its content.
+    if (wasActive) invalidateAllContent(ref);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Deleted "${p.name}"'),
+          duration: const Duration(seconds: 2)));
     }
   }
 
@@ -221,6 +234,9 @@ class _ProfilesScreenState extends ConsumerState<ProfilesScreen> {
                   await ref.read(profileProvider.notifier).switchProfile(p.id);
                   ref.read(categoryPrefsProvider.notifier).reload();
                   ref.read(languagePrefsProvider.notifier).reload();
+                  // Re-fetch everything for the new profile (its playlist,
+                  // watch history, favourites, language prefs).
+                  invalidateAllContent(ref);
                   if (context.mounted) context.go('/home');
                 },
               ),

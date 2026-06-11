@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/language/language_prefs.dart';
+import '../../core/providers/content_refresh.dart';
 import '../../core/providers/profile_provider.dart';
 import '../../core/storage/category_prefs_notifier.dart';
 import '../../core/storage/storage_service.dart';
@@ -63,6 +64,8 @@ class _ProfileSelectScreenState extends ConsumerState<ProfileSelectScreen> {
                               .switchProfile(profiles[i].id);
                           ref.read(categoryPrefsProvider.notifier).reload();
                           ref.read(languagePrefsProvider.notifier).reload();
+                          // Re-fetch everything for the chosen profile.
+                          invalidateAllContent(ref);
                           if (context.mounted) context.go('/home');
                         },
                         onEdit: () async {

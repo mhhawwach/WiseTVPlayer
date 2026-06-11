@@ -41,10 +41,19 @@ class RecentlyWatchedRow extends StatelessWidget {
     final label = title ??
         (type == 'live' ? 'Recently Watched' : 'Continue Watching');
 
-    // Only show VOD items that have a saved position for "Continue Watching"
-    final displayItems = type == 'vod'
-        ? items.where((m) => (m['position'] as int? ?? 0) > 0).toList()
-        : items;
+    // For "Continue Watching" (vod/series): only in-progress items — exclude
+    // anything watched or effectively finished (>95%) so completed titles don't
+    // linger. Live is just "recently watched" (no finished concept).
+    final displayItems = type == 'live'
+        ? items
+        : items.where((m) {
+            if (((m['watched'] as bool?) ?? false)) return false;
+            final pos = (m['position'] as int?) ?? 0;
+            if (pos <= 0) return false;
+            final dur = (m['duration'] as int?) ?? 0;
+            if (dur > 0 && pos / dur > 0.95) return false;
+            return true;
+          }).toList();
 
     if (displayItems.isEmpty) return const SizedBox.shrink();
 

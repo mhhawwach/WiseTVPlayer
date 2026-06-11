@@ -346,6 +346,12 @@ class _SeriesBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final episodes = info.episodes[selectedSeason] ?? [];
+    // Flat, in-order list across ALL seasons, so the player can advance from the
+    // last episode of a season into the next season. Each tile passes its GLOBAL
+    // index within this list.
+    final allFlat = <SeriesEpisode>[
+      for (final s in info.seasonNumbers) ...(info.episodes[s] ?? const []),
+    ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -488,12 +494,12 @@ class _SeriesBody extends StatelessWidget {
           const SizedBox(height: 16),
           const Divider(),
           const SizedBox(height: 4),
-          ...episodes.asMap().entries.map((entry) => _EpisodeTile(
-                key: ValueKey(entry.value.id),
-                episode: entry.value,
+          ...episodes.map((ep) => _EpisodeTile(
+                key: ValueKey(ep.id),
+                episode: ep,
                 seriesTitle: series.name,
-                allEpisodes: episodes,
-                episodeIndex: entry.key,
+                allEpisodes: allFlat,
+                episodeIndex: allFlat.indexWhere((e) => e.id == ep.id),
               )),
         ],
       ],

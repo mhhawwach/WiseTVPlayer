@@ -277,6 +277,23 @@ class StorageService {
     return items.take(limit).toList();
   }
 
+  /// Items eligible for "Continue Watching": started (>30s) movies/episodes
+  /// that are NOT marked watched AND NOT effectively finished (>95% played).
+  /// The >95% rule is what stops a finished episode from lingering even if the
+  /// player didn't get to flag `watched`.
+  static List<Map<String, dynamic>> continueWatching({int limit = 10}) {
+    return getHistory().where((item) {
+      final type = item['type'];
+      if (type != 'vod' && type != 'series') return false;
+      if (((item['watched'] as bool?) ?? false)) return false;
+      final pos = (item['position'] as int?) ?? 0;
+      if (pos <= 30) return false;
+      final dur = (item['duration'] as int?) ?? 0;
+      if (dur > 0 && pos / dur > 0.95) return false; // effectively finished
+      return true;
+    }).take(limit).toList();
+  }
+
   static Future<void> clearHistory() async {
     final keys = _historyBox.keys
         .where((k) => k.toString().startsWith(_p))

@@ -64,14 +64,9 @@ class HomeScreen extends ConsumerWidget {
     final playlistName =
         pid != null ? (StorageService.getPlaylist(pid)?.name ?? '') : '';
 
-    // Continue Watching — sync, always available
-    final continueWatching = StorageService.getHistory()
-        .where((item) =>
-            (item['type'] == 'vod' || item['type'] == 'series') &&
-            ((item['position'] as int?) ?? 0) > 30 &&
-            !((item['watched'] as bool?) ?? false))
-        .take(10)
-        .toList();
+    // Continue Watching — sync, always available. Centralised filter excludes
+    // finished items (>95% played) so completed episodes don't linger.
+    final continueWatching = StorageService.continueWatching();
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -801,8 +796,11 @@ class _MovieRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Size posters so ~6 are visible across the row on TV/desktop.
+    final cardW =
+        ((MediaQuery.of(context).size.width - 32) / 6 - 12).clamp(96.0, 200.0);
     return SizedBox(
-      height: 180,
+      height: cardW * 1.41 + 28,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -811,6 +809,7 @@ class _MovieRow extends StatelessWidget {
           imageUrl: movies[i].streamIcon,
           title: movies[i].name,
           rating: movies[i].rating,
+          width: cardW,
           onTap: () => context.push('/movies/detail', extra: movies[i]),
         ),
       ),
@@ -824,8 +823,10 @@ class _SeriesRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cardW =
+        ((MediaQuery.of(context).size.width - 32) / 6 - 12).clamp(96.0, 200.0);
     return SizedBox(
-      height: 180,
+      height: cardW * 1.41 + 28,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -834,6 +835,7 @@ class _SeriesRow extends StatelessWidget {
           imageUrl: series[i].cover,
           title: series[i].name,
           rating: series[i].rating,
+          width: cardW,
           onTap: () => context.push('/series/detail', extra: series[i]),
         ),
       ),
@@ -847,22 +849,25 @@ class _PosterCard extends StatelessWidget {
     required this.title,
     required this.rating,
     required this.onTap,
+    this.width = 110,
   });
   final String imageUrl;
   final String title;
   final String rating;
   final VoidCallback onTap;
+  final double width;
 
   @override
   Widget build(BuildContext context) {
     final ratingLabel = formatRatingLabel(rating);
     final hasRating = ratingLabel != null;
+    final posterH = width * 1.41; // ~2:3 poster
 
     return FocusableCard(
       onPressed: onTap,
       borderRadius: 8,
       child: Container(
-        width: 110,
+        width: width,
         margin: const EdgeInsets.only(right: 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -873,8 +878,8 @@ class _PosterCard extends StatelessWidget {
               child: Stack(
                 children: [
                   SizedBox(
-                    width: 110,
-                    height: 155,
+                    width: width,
+                    height: posterH,
                     child: imageUrl.isNotEmpty
                         ? CachedNetworkImage(
                             imageUrl: imageUrl,

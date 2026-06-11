@@ -226,7 +226,8 @@ class _MoviesListScreenState extends ConsumerState<MoviesListScreen> {
             // has a target even before the grid reports its first focus event.
             _focused ??= filtered.first;
 
-            final cols = MediaQuery.of(context).size.width > 900 ? 6 : 3;
+            // 6 across on TV / desktop / tablet; 3 on phones.
+            final cols = MediaQuery.of(context).size.width >= 600 ? 6 : 3;
             return GridView.builder(
               padding: const EdgeInsets.fromLTRB(10, 8, 10, 100),
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(

@@ -8,18 +8,16 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/channel_logo.dart';
 import '../../core/widgets/focusable_card.dart';
 import '../../data/models/live_category.dart';
-import '../../data/models/live_stream.dart';
 import '../../data/models/vod_stream.dart';
 import '../../data/models/series_stream.dart';
-import '../../features/player/live_player_screen.dart';
 import '../../services/xtream_service.dart';
-import '../live_tv/live_categories_screen.dart' show liveCategoriesProvider;
 import '../movies/movies_categories_screen.dart' show vodCategoriesProvider;
 import '../series/series_categories_screen.dart' show seriesCategoriesProvider;
 
 // ── Result model ─────────────────────────────────────────────────────────────
+// NOTE: global search intentionally covers Movies + Series only — not Live TV.
 
-enum _ResultType { live, vod, series }
+enum _ResultType { vod, series }
 
 class _SearchResult {
   final _ResultType type;
@@ -38,14 +36,6 @@ class _SearchResult {
 // ── Providers ─────────────────────────────────────────────────────────────────
 
 /// Lazy-loaded full content lists for searching — fetched once per session.
-final _allLiveProvider = FutureProvider<List<LiveStream>>((ref) async {
-  final id = StorageService.activePlaylistId;
-  if (id == null) return [];
-  final p = StorageService.getPlaylist(id);
-  if (p == null) return [];
-  return ref.read(xtreamServiceProvider).getLiveStreams(p);
-});
-
 final _allVodProvider = FutureProvider<List<VodStream>>((ref) async {
   final id = StorageService.activePlaylistId;
   if (id == null) return [];
@@ -82,10 +72,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   List<_SearchResult> _buildResults(
-    AsyncValue<List<LiveStream>> live,
     AsyncValue<List<VodStream>> vod,
     AsyncValue<List<SeriesStream>> series, {
-    required Set<String> blockedLive,
     required Set<String> blockedVod,
     required Set<String> blockedSeries,
   }) {
@@ -93,18 +81,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final q = _query.toLowerCase();
     final results = <_SearchResult>[];
 
-    if (live.hasValue) {
-      results.addAll(live.value!
-          .where((c) =>
-              c.name.toLowerCase().contains(q) &&
-              !blockedLive.contains(c.categoryId))
-          .take(20)
-          .map((c) => _SearchResult(
-              type: _ResultType.live,
-              id: c.streamId,
-              name: c.name,
-              icon: c.streamIcon)));
-    }
     if (vod.hasValue) {
       results.addAll(vod.value!
           .where((m) =>
@@ -131,22 +107,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   void _openResult(_SearchResult r) {
-    final pid = StorageService.activePlaylistId;
-    if (pid == null) return;
-    final playlist = StorageService.getPlaylist(pid)!;
-
     switch (r.type) {
-      case _ResultType.live:
-        final stream = ref.read(_allLiveProvider).value?.firstWhere((c) => c.streamId == r.id);
-        if (stream == null) return;
-        final all = ref.read(_allLiveProvider).value ?? [];
-        context.push('/player/live',
-            extra: LivePlayerArgs(
-              stream: stream,
-              playlist: playlist,
-              channelList: all,
-              initialIndex: all.indexOf(stream),
-            ));
       case _ResultType.vod:
         final vod = VodStream(
           num: 0,
@@ -171,16 +132,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final live = ref.watch(_allLiveProvider);
     final vod = ref.watch(_allVodProvider);
     final series = ref.watch(_allSeriesProvider);
 
     // Language filter — hide results in unselected languages (genres / untagged
     // categories are always searchable).
     final langPrefs = ref.watch(languagePrefsProvider);
-    final blockedLive = blockedCategoryIdsFor(
-        ref.watch(liveCategoriesProvider).value ?? const <LiveCategory>[],
-        langPrefs);
     final blockedVod = blockedCategoryIdsFor(
         ref.watch(vodCategoriesProvider).value ?? const <LiveCategory>[],
         langPrefs);
@@ -188,12 +145,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         ref.watch(seriesCategoriesProvider).value ?? const <LiveCategory>[],
         langPrefs);
 
-    final loading = live.isLoading || vod.isLoading || series.isLoading;
+    final loading = vod.isLoading || series.isLoading;
     final results = _buildResults(
-      live,
       vod,
       series,
-      blockedLive: blockedLive,
       blockedVod: blockedVod,
       blockedSeries: blockedSeries,
     );
@@ -206,7 +161,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           onChanged: (v) => setState(() => _query = v),
           style: const TextStyle(color: AppColors.textPrimary, fontSize: 16),
           decoration: InputDecoration(
-            hintText: 'Search live, movies, series...',
+            hintText: 'Search movies & series...',
             hintStyle: const TextStyle(color: AppColors.textMuted),
             border: InputBorder.none,
             isDense: true,
@@ -280,14 +235,12 @@ class _ResultTile extends StatelessWidget {
   final VoidCallback onTap;
 
   static const _typeLabel = {
-    _ResultType.live: 'LIVE',
     _ResultType.vod: 'MOVIE',
     _ResultType.series: 'SERIES',
   };
 
   // Cannot be const — AppColors.primary/accent are non-const getters (theme-dependent)
   static final _typeColor = {
-    _ResultType.live: AppColors.liveRed,
     _ResultType.vod: AppColors.primary,
     _ResultType.series: AppColors.accent,
   };
