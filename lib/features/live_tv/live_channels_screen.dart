@@ -812,7 +812,14 @@ class _LiveTwoPaneScreenState extends ConsumerState<LiveTwoPaneScreen> {
           if (!_didInitialFocus) {
             _didInitialFocus = true;
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) _firstCatFocus.requestFocus();
+              if (!mounted) return;
+              // Data can arrive seconds later on big playlists — don't yank
+              // focus away if the user is already typing in a search field.
+              final pf = FocusManager.instance.primaryFocus;
+              final typing = pf?.context
+                      ?.findAncestorStateOfType<EditableTextState>() !=
+                  null;
+              if (!typing) _firstCatFocus.requestFocus();
             });
           }
 
@@ -1167,7 +1174,8 @@ class _CategoryRailItemState extends State<_CategoryRailItem>
         onKeyEvent: (_, event) {
           if (event is KeyDownEvent &&
               (event.logicalKey == LogicalKeyboardKey.select ||
-                  event.logicalKey == LogicalKeyboardKey.enter)) {
+                  event.logicalKey == LogicalKeyboardKey.enter ||
+                  event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
             widget.onSelected();
             return KeyEventResult.handled;
           }

@@ -86,12 +86,30 @@ class _TvTextFieldState extends State<TvTextField> {
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent e) {
-    if (e is! KeyDownEvent) return KeyEventResult.ignored;
+    if (e is! KeyDownEvent && e is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
     final k = e.logicalKey;
-    if (k == LogicalKeyboardKey.select ||
-        k == LogicalKeyboardKey.enter ||
-        k == LogicalKeyboardKey.gameButtonA) {
+    if (e is KeyDownEvent &&
+        (k == LogicalKeyboardKey.select ||
+            k == LogicalKeyboardKey.enter ||
+            k == LogicalKeyboardKey.numpadEnter ||
+            k == LogicalKeyboardKey.gameButtonA)) {
       _openKeyboard();
+      return KeyEventResult.handled;
+    }
+    // Even read-only, the editor swallows arrows (selection movement) via the
+    // root text-editing shortcuts — which trapped the D-pad on the field (the
+    // "can't reach the next field / Save button" bug). Move focus instead.
+    final TraversalDirection? dir = switch (k) {
+      LogicalKeyboardKey.arrowUp => TraversalDirection.up,
+      LogicalKeyboardKey.arrowDown => TraversalDirection.down,
+      LogicalKeyboardKey.arrowLeft => TraversalDirection.left,
+      LogicalKeyboardKey.arrowRight => TraversalDirection.right,
+      _ => null,
+    };
+    if (dir != null) {
+      FocusManager.instance.primaryFocus?.focusInDirection(dir);
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;

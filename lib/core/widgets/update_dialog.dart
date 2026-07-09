@@ -111,6 +111,9 @@ class _UpdateDialog extends StatelessWidget {
                 style: TextStyle(color: AppColors.textSecondary)),
           ),
         FilledButton.icon(
+          // Initial D-pad focus — without an anchor the remote had nothing
+          // focused inside the dialog and key presses leaked to the page.
+          autofocus: true,
           onPressed: () async {
             if (info.downloadUrl.isNotEmpty) {
               final uri = Uri.tryParse(info.downloadUrl);

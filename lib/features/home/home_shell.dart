@@ -179,25 +179,31 @@ class _TVShell extends StatefulWidget {
 class _TVShellState extends State<_TVShell> {
   // The rail and the page live in separate focus scopes; directional focus
   // can't reliably cross between them, so we bridge explicitly:
-  //   • _railFocusNode  — the active rail item; content's Left-at-edge targets it.
+  //   • _tabNodes       — one STABLE node per rail tab; content's Left-at-edge
+  //     targets the current tab's node. (A single node that moved between
+  //     items disposed the node holding focus on every tab switch, so the
+  //     highlight teleported — usually back to Home.)
   //   • _contentScope   — the page scope; the rail's Right targets it.
-  final FocusNode _railFocusNode = FocusNode(debugLabel: 'railActive');
+  late final List<FocusNode> _tabNodes =
+      List.generate(_tabs.length, (i) => FocusNode(debugLabel: 'railTab$i'));
   final FocusScopeNode _contentScope = FocusScopeNode(debugLabel: 'content');
 
   @override
   void initState() {
     super.initState();
-    // Default initial focus to the rail (Home), after the first frame so it
-    // beats any autofocus inside the page content (which used to steal it,
-    // landing the user on the refresh button instead of the rail).
+    // Default initial focus to the rail (current tab), after the first frame
+    // so it beats any autofocus inside the page content (which used to steal
+    // it, landing the user on the refresh button instead of the rail).
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _railFocusNode.requestFocus();
+      if (mounted) _tabNodes[widget.currentIndex].requestFocus();
     });
   }
 
   @override
   void dispose() {
-    _railFocusNode.dispose();
+    for (final n in _tabNodes) {
+      n.dispose();
+    }
     _contentScope.dispose();
     super.dispose();
   }
@@ -212,27 +218,59 @@ class _TVShellState extends State<_TVShell> {
     });
   }
 
-  // Focuses the first concrete focusable inside the content scope. requestFocus
-  // on the scope alone does NOT reliably descend into the page's nested
-  // Navigator focus scope, so we target a node directly (works across scopes).
+  // Focuses the top-left-most concrete focusable inside the content scope.
+  // requestFocus on the scope alone does NOT reliably descend into the page's
+  // nested Navigator focus scope, so we target a node directly (works across
+  // scopes). Geometry-sorted: traversalDescendants iterates in focus-tree
+  // ATTACH order, and after async loads / keep-alive churn its first entry can
+  // be any node on the page (this used to land Right-from-rail on the refresh
+  // button or a mid-page card and auto-scroll to it).
   bool _tryFocusContent() {
+    FocusNode? best;
+    var bestTop = double.infinity;
+    var bestLeft = double.infinity;
     for (final node in _contentScope.traversalDescendants) {
-      node.requestFocus();
-      return true;
+      if (node.context == null) continue;
+      final Rect r;
+      try {
+        r = node.rect; // throws for nodes not (yet) in the render tree
+      } catch (_) {
+        continue;
+      }
+      if (!r.isFinite || r.isEmpty) continue;
+      if (r.top < bestTop || (r.top == bestTop && r.left < bestLeft)) {
+        bestTop = r.top;
+        bestLeft = r.left;
+        best = node;
+      }
     }
-    return false;
+    if (best == null) return false;
+    best.requestFocus();
+    return true;
   }
 
   // Bridges content → rail. Returns true (handled) for Left so we control the
   // move: stay within the page if there's something to the left, otherwise
   // hop back to the side rail (which lives in an outer focus scope).
   KeyEventResult _onContentKey(FocusNode node, KeyEvent event) {
-    if (event is KeyDownEvent &&
+    if ((event is KeyDownEvent || event is KeyRepeatEvent) &&
         event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      final moved = FocusManager.instance.primaryFocus
-              ?.focusInDirection(TraversalDirection.left) ??
-          false;
-      if (!moved) _railFocusNode.requestFocus();
+      final focused = FocusManager.instance.primaryFocus;
+      final fctx = focused?.context;
+      if (fctx != null) {
+        // Bottom sheets / popup menus opened from shell pages push onto the
+        // nested navigator, so their key events bubble through here too. Never
+        // bridge out of one — it yanked focus to the rail BEHIND the open
+        // sheet. And never steal ← from a text editor (it's cursor movement);
+        // left alone it bubbles on to DefaultTextEditingShortcuts at the root.
+        if (ModalRoute.of(fctx) is PopupRoute ||
+            fctx.findAncestorStateOfType<EditableTextState>() != null) {
+          return KeyEventResult.ignored;
+        }
+      }
+      final moved =
+          focused?.focusInDirection(TraversalDirection.left) ?? false;
+      if (!moved) _tabNodes[widget.currentIndex].requestFocus();
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -312,11 +350,12 @@ class _TVShellState extends State<_TVShell> {
                               selected: widget.currentIndex == i,
                               expanded: widget.expanded,
                               autofocus: i == 0,
-                              // The active tab carries the shared node so the
-                              // page content can hand focus back to the rail.
-                              focusNode: i == widget.currentIndex
-                                  ? _railFocusNode
-                                  : null,
+                              // Every tab keeps its own stable node (the
+                              // content's Left-at-edge targets the current
+                              // one). Nodes must never move between items:
+                              // re-parenting disposes the node that holds
+                              // focus mid-press and the highlight teleports.
+                              focusNode: _tabNodes[i],
                               onTap: () => widget.onTabTap(i),
                               onMoveRight: _focusContent,
                             ),
@@ -337,8 +376,7 @@ class _TVShellState extends State<_TVShell> {
                             selected: widget.currentIndex == 6,
                             expanded: widget.expanded,
                             autofocus: false,
-                            focusNode:
-                                widget.currentIndex == 6 ? _railFocusNode : null,
+                            focusNode: _tabNodes[6],
                             onTap: () => widget.onTabTap(6),
                             onMoveRight: _focusContent,
                           ),
@@ -415,10 +453,13 @@ class _TVRailItemState extends State<_TVRailItem> {
       onKeyEvent: (_, event) {
         if (event is KeyDownEvent) {
           if (event.logicalKey == LogicalKeyboardKey.select ||
-              event.logicalKey == LogicalKeyboardKey.enter) {
+              event.logicalKey == LogicalKeyboardKey.enter ||
+              event.logicalKey == LogicalKeyboardKey.numpadEnter) {
             widget.onTap();
             return KeyEventResult.handled;
           }
+        }
+        if (event is KeyDownEvent || event is KeyRepeatEvent) {
           // Right hands focus into the page content (separate focus scope).
           if (event.logicalKey == LogicalKeyboardKey.arrowRight &&
               widget.onMoveRight != null) {
@@ -530,10 +571,13 @@ class _ProfileRailButtonState extends ConsumerState<_ProfileRailButton> {
         onKeyEvent: (_, event) {
           if (event is KeyDownEvent) {
             if (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter) {
+                event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.numpadEnter) {
               _showProfileMenu(context, ref);
               return KeyEventResult.handled;
             }
+          }
+          if (event is KeyDownEvent || event is KeyRepeatEvent) {
             if (event.logicalKey == LogicalKeyboardKey.arrowRight &&
                 widget.onMoveRight != null) {
               widget.onMoveRight!();
@@ -679,7 +723,8 @@ class _ProfileMenuOptionState extends State<_ProfileMenuOption> {
         onKeyEvent: (_, event) {
           if (event is KeyDownEvent &&
               (event.logicalKey == LogicalKeyboardKey.select ||
-                  event.logicalKey == LogicalKeyboardKey.enter)) {
+                  event.logicalKey == LogicalKeyboardKey.enter ||
+                  event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
             widget.onTap();
             return KeyEventResult.handled;
           }

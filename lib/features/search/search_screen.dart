@@ -7,6 +7,7 @@ import '../../core/storage/storage_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/channel_logo.dart';
 import '../../core/widgets/focusable_card.dart';
+import '../../core/widgets/tv_focus.dart';
 import '../../data/models/live_category.dart';
 import '../../data/models/vod_stream.dart';
 import '../../data/models/series_stream.dart';
@@ -63,11 +64,15 @@ class SearchScreen extends ConsumerStatefulWidget {
 
 class _SearchScreenState extends ConsumerState<SearchScreen> {
   final _ctrl = TextEditingController();
+  // Escape node: lets the D-pad leave the search box with ↑/↓ (a focused text
+  // editor otherwise swallows them as cursor movement — "stuck in search").
+  final FocusNode _searchFocus = searchEscapeFocusNode();
   String _query = '';
 
   @override
   void dispose() {
     _ctrl.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -157,6 +162,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       appBar: AppBar(
         title: TextField(
           controller: _ctrl,
+          focusNode: _searchFocus,
           autofocus: true,
           onChanged: (v) => setState(() => _query = v),
           style: const TextStyle(color: AppColors.textPrimary, fontSize: 16),

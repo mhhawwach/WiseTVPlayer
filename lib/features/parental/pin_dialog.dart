@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../core/storage/storage_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/focusable_card.dart';
 
 /// Shows a PIN-entry dialog. Returns true if the correct PIN is entered,
 /// false if the user cancels.
@@ -58,12 +60,32 @@ class _PinDialogState extends State<_PinDialog> {
     }
   }
 
+  // Remotes / keyboards with digit keys can type the PIN directly; the wrapper
+  // only listens (never holds focus — see canRequestFocus/skipTraversal below).
+  KeyEventResult _onHwKey(FocusNode node, KeyEvent e) {
+    if (e is! KeyDownEvent) return KeyEventResult.ignored;
+    if (e.logicalKey == LogicalKeyboardKey.backspace) {
+      _tap('⌫');
+      return KeyEventResult.handled;
+    }
+    final ch = e.character;
+    if (ch != null && ch.length == 1 && '0123456789'.contains(ch)) {
+      _tap(ch);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Dialog(
       backgroundColor: AppColors.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
+      child: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onKeyEvent: _onHwKey,
+        child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 28),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -91,6 +113,7 @@ class _PinDialogState extends State<_PinDialog> {
                   style: TextStyle(color: AppColors.textSecondary)),
             ),
           ],
+        ),
         ),
       ),
     );
@@ -157,26 +180,34 @@ class _NumPad extends StatelessWidget {
         return Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: row.map((k) {
-            if (k.isEmpty) return const SizedBox(width: 68, height: 56);
-            return GestureDetector(
-              onTap: () => onTap(k),
-              child: Container(
-                width: 68,
-                height: 56,
-                margin: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: AppColors.card,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Center(
-                  child: k == '⌫'
-                      ? const Icon(Icons.backspace_outlined,
-                          color: AppColors.textSecondary, size: 20)
-                      : Text(k,
-                          style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w600)),
+            if (k.isEmpty) return const SizedBox(width: 76, height: 64);
+            // FocusableCard so the pad is D-pad navigable — the keys were
+            // plain GestureDetectors, leaving the PIN dialog unusable with a
+            // remote (nothing on it could take focus).
+            return Padding(
+              padding: const EdgeInsets.all(4),
+              child: FocusableCard(
+                autofocus: k == '5', // centre key = fewest presses to any digit
+                borderRadius: 8,
+                focusScale: 1.04,
+                onPressed: () => onTap(k),
+                child: Container(
+                  width: 68,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: AppColors.card,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(
+                    child: k == '⌫'
+                        ? const Icon(Icons.backspace_outlined,
+                            color: AppColors.textSecondary, size: 20)
+                        : Text(k,
+                            style: const TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w600)),
+                  ),
                 ),
               ),
             );

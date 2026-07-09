@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/storage/storage_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/focusable_card.dart';
 import '../../data/models/epg_listing.dart';
 import '../../data/models/live_stream.dart';
 import '../../services/xtream_service.dart';
@@ -90,7 +91,16 @@ class EpgPanel extends ConsumerWidget {
                       itemCount: listings.length,
                       separatorBuilder: (_, __) =>
                           const Divider(height: 1, indent: 16, endIndent: 16),
-                      itemBuilder: (_, i) => _EpgRow(listing: listings[i]),
+                      // Rows are read-only but must still take D-pad focus:
+                      // it anchors focus inside the sheet, and arrowing
+                      // through rows auto-scrolls entries beyond the fold
+                      // (otherwise a remote can't scroll this list at all).
+                      itemBuilder: (_, i) => FocusableCard(
+                        autofocus: i == 0,
+                        focusScale: 1.0,
+                        borderRadius: 8,
+                        child: _EpgRow(listing: listings[i]),
+                      ),
                     ),
                   ),
           ),

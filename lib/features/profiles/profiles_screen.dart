@@ -744,7 +744,8 @@ class _PickerOptionState extends State<_PickerOption> {
       onKeyEvent: (_, event) {
         if (event is KeyDownEvent &&
             (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter)) {
+                event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
           widget.onTap();
           return KeyEventResult.handled;
         }

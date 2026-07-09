@@ -34,7 +34,10 @@ class DpadScrollable extends StatelessWidget {
       canRequestFocus: false,
       skipTraversal: true,
       onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        // Repeats too — holding ↓ must keep scrolling, not stop after one step.
+        if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+          return KeyEventResult.ignored;
+        }
 
         final TraversalDirection? dir;
         if (event.logicalKey == LogicalKeyboardKey.arrowDown) {

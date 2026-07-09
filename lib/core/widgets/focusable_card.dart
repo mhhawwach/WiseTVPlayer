@@ -77,9 +77,13 @@ class _FocusableCardState extends State<FocusableCard>
         }
       },
       onKeyEvent: (node, event) {
+        // numpadEnter/space cover desktop keyboards (raw Focus widgets get no
+        // ActivateIntent action, so Space/NumPad-Enter were dead on cards).
         if (event is KeyDownEvent &&
             (event.logicalKey == LogicalKeyboardKey.select ||
                 event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.numpadEnter ||
+                event.logicalKey == LogicalKeyboardKey.space ||
                 event.logicalKey == LogicalKeyboardKey.gameButtonA)) {
           widget.onPressed?.call();
           return KeyEventResult.handled;

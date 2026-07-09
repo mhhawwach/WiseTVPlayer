@@ -317,6 +317,7 @@ class _VodPlayerScreenState extends State<VodPlayerScreen>
               widget.args.onNext != null &&
               (event.logicalKey == LogicalKeyboardKey.select ||
                   event.logicalKey == LogicalKeyboardKey.enter ||
+                  event.logicalKey == LogicalKeyboardKey.numpadEnter ||
                   event.logicalKey == LogicalKeyboardKey.gameButtonA)) {
             widget.args.onNext!();
             return KeyEventResult.handled;

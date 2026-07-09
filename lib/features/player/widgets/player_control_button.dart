@@ -63,6 +63,7 @@ class _PlayerControlButtonState extends State<PlayerControlButton> {
         if (event is KeyDownEvent &&
             (event.logicalKey == LogicalKeyboardKey.select ||
                 event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.numpadEnter ||
                 event.logicalKey == LogicalKeyboardKey.gameButtonA)) {
           widget.onPressed?.call();
           return KeyEventResult.handled;

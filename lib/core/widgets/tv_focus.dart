@@ -13,7 +13,7 @@ import 'package:flutter/services.dart';
 FocusNode searchEscapeFocusNode() => FocusNode(
       debugLabel: 'tv-search',
       onKeyEvent: (node, e) {
-        if (e is KeyDownEvent) {
+        if (e is KeyDownEvent || e is KeyRepeatEvent) {
           if (e.logicalKey == LogicalKeyboardKey.arrowDown) {
             node.focusInDirection(TraversalDirection.down);
             return KeyEventResult.handled;

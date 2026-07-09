@@ -107,7 +107,15 @@ class _TvKeyboardSheetState extends State<_TvKeyboardSheet> {
 
   @override
   Widget build(BuildContext context) {
+    // canRequestFocus/skipTraversal: this wrapper only LISTENS for bubbled
+    // hardware keystrokes — it must never hold D-pad focus itself. Without
+    // these flags it is an invisible, sheet-sized focusable: directional
+    // traversal could land on it (observed around the middle of the QWERTY
+    // row on Fire TV), the highlight vanished, and — because every key lies
+    // inside its rect — no arrow direction could ever escape it again.
     return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
       onKeyEvent: _onHwKey,
       child: SingleChildScrollView(
         child: Padding(

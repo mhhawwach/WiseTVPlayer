@@ -13,6 +13,7 @@ import 'core/diagnostics/crash_reporter.dart';
 import 'core/perf/perf_profile.dart';
 import 'core/storage/storage_service.dart';
 import 'core/utils/content_cache_service.dart';
+import 'core/utils/device_utils.dart';
 
 void main() {
   // Run everything inside a guarded zone so uncaught async errors are caught.
@@ -47,6 +48,11 @@ Future<void> _bootstrap() async {
 
   await CrashReporter.init();
   CrashReporter.install();
+
+  // Resolve the TV flag before the first screens build — widgets that branch
+  // on DeviceUtils.isTVSync (e.g. TvTextField) otherwise render their phone
+  // variant for a frame and then rebuild mid-focus once the async check lands.
+  await DeviceUtils.warmup();
 
   runApp(
     const ProviderScope(

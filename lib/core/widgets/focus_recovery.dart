@@ -108,9 +108,16 @@ class _FocusRecoveryState extends State<FocusRecovery> {
       final cur = FocusManager.instance.primaryFocus;
       if (_isConcrete(cur)) return; // recovered on its own
 
-      // 1) Re-focus the last concrete node if it survived.
+      // 1) Re-focus the last concrete node if it survived — but only if it
+      //    lives under the scope that now holds focus. When a dialog / sheet
+      //    opens, focus falls onto the NEW route's fresh scope; the last good
+      //    node is the widget BEHIND the barrier (still alive and perfectly
+      //    focusable), and refocusing it made the remote operate the invisible
+      //    background while the popup sat there dead. Falling through to (2)
+      //    instead lands focus on the popup's own first focusable.
       final lg = _lastGood;
-      if (_isConcrete(lg)) {
+      if (_isConcrete(lg) &&
+          (cur is! FocusScopeNode || lg!.ancestors.contains(cur))) {
         lg!.requestFocus();
         return;
       }
