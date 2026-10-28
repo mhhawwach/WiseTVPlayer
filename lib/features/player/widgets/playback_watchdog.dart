@@ -14,7 +14,7 @@ class PlaybackWatchdog {
     required this.player,
     required this.onFailure,
     this.onStall,
-    this.openTimeout = const Duration(seconds: 20),
+    this.openTimeout = const Duration(seconds: 30),
     this.stallTimeout = const Duration(seconds: 15),
     this.errorGrace = const Duration(seconds: 4),
     @visibleForTesting DateTime Function()? clock,

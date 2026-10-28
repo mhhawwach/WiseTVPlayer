@@ -969,7 +969,7 @@ class _LiveRightPaneState extends ConsumerState<_LiveRightPane> {
       _previewWatch?.dispose();
       _previewWatch = PlaybackWatchdog(
         player: player,
-        openTimeout: const Duration(seconds: 12),
+        openTimeout: const Duration(seconds: 20),
         onFailure: (_) {
           if (mounted) setState(() => _previewFailed = true);
         },
