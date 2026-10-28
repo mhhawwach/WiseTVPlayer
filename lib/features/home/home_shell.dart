@@ -230,7 +230,9 @@ class _TVShellState extends State<_TVShell> {
     var bestTop = double.infinity;
     var bestLeft = double.infinity;
     for (final node in _contentScope.traversalDescendants) {
-      if (node.context == null) continue;
+      // A page's own scope sits at the page's top-left too, but focusing a
+      // scope highlights nothing.
+      if (node is FocusScopeNode || node.context == null) continue;
       final Rect r;
       try {
         r = node.rect; // throws for nodes not (yet) in the render tree
@@ -249,39 +251,92 @@ class _TVShellState extends State<_TVShell> {
     return true;
   }
 
-  // Bridges content → rail. Returns true (handled) for Left so we control the
-  // move: stay within the page if there's something to the left, otherwise
-  // hop back to the side rail (which lives in an outer focus scope).
-  KeyEventResult _onContentKey(FocusNode node, KeyEvent event) {
-    if ((event is KeyDownEvent || event is KeyRepeatEvent) &&
-        event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      final focused = FocusManager.instance.primaryFocus;
-      final fctx = focused?.context;
-      if (fctx != null) {
-        // Bottom sheets / popup menus opened from shell pages push onto the
-        // nested navigator, so their key events bubble through here too. Never
-        // bridge out of one — it yanked focus to the rail BEHIND the open
-        // sheet. And never steal ← from a text editor (it's cursor movement);
-        // left alone it bubbles on to DefaultTextEditingShortcuts at the root.
-        if (ModalRoute.of(fctx) is PopupRoute ||
-            fctx.findAncestorStateOfType<EditableTextState>() != null) {
-          return KeyEventResult.ignored;
-        }
-      }
-      final moved =
-          focused?.focusInDirection(TraversalDirection.left) ?? false;
-      if (!moved) _tabNodes[widget.currentIndex].requestFocus();
-      return KeyEventResult.handled;
+  // Opening a tab moves focus into its page; a page with nothing focusable
+  // (e.g. an empty Favourites) keeps it on the rail instead of dropping it.
+  void _openTab(int index) {
+    widget.onTabTap(index);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _tryFocusContent()) return;
+      _tabNodes[index].requestFocus();
+      // Async pages build their first items a frame later.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _tabNodes[index].hasFocus) _tryFocusContent();
+      });
+    });
+  }
+
+  static Rect? _rectOf(FocusNode? node) {
+    if (node == null || node.context == null) return null;
+    try {
+      return node.rect;
+    } catch (_) {
+      return null; // not laid out
     }
-    return KeyEventResult.ignored;
+  }
+
+  // Bridges content → rail. Handles the arrow pointing at the rail (Left, or
+  // Right in RTL where the rail sits on the right) so we control the move:
+  // stay within the page if there's something beside the focused item on the
+  // same row, otherwise hop to the side rail (an outer focus scope).
+  KeyEventResult _onContentKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final rtl = Directionality.of(context) == TextDirection.rtl;
+    final towardRail =
+        rtl ? LogicalKeyboardKey.arrowRight : LogicalKeyboardKey.arrowLeft;
+    if (event.logicalKey != towardRail) return KeyEventResult.ignored;
+
+    final focused = FocusManager.instance.primaryFocus;
+    final fctx = focused?.context;
+    if (fctx != null) {
+      // Bottom sheets / popup menus opened from shell pages push onto the
+      // nested navigator, so their key events bubble through here too. Never
+      // bridge out of one — it yanked focus to the rail BEHIND the open sheet.
+      // And never steal the arrow from an editable text field (it's cursor
+      // movement); left alone it bubbles on to DefaultTextEditingShortcuts.
+      final editor = fctx.findAncestorStateOfType<EditableTextState>();
+      if (ModalRoute.of(fctx) is PopupRoute ||
+          (editor != null && !editor.widget.readOnly)) {
+        return KeyEventResult.ignored;
+      }
+    }
+    // Directional traversal falls back to anything on that side, even rows
+    // away (Left from an episode jumped up to the page's Back arrow and
+    // scrolled to the top). Only a neighbour on the same row counts.
+    final rect = _rectOf(focused);
+    final moved = focused != null &&
+        (rect == null || _hasNeighbourInRow(focused, rect, rtl)) &&
+        focused.focusInDirection(
+            rtl ? TraversalDirection.right : TraversalDirection.left);
+    if (!moved) _tabNodes[widget.currentIndex].requestFocus();
+    return KeyEventResult.handled;
+  }
+
+  static bool _hasNeighbourInRow(FocusNode focused, Rect rect, bool rtl) {
+    final scope = focused.nearestScope;
+    if (scope == null) return false;
+    for (final node in scope.traversalDescendants) {
+      if (identical(node, focused) || node is FocusScopeNode) continue;
+      final r = _rectOf(node);
+      if (r == null || r.isEmpty) continue;
+      final beside = rtl ? r.left >= rect.right - 1 : r.right <= rect.left + 1;
+      final sameRow = r.top < rect.bottom && r.bottom > rect.top;
+      if (beside && sameRow) return true;
+    }
+    return false;
   }
 
   @override
   Widget build(BuildContext context) {
+    // Phones in landscape are ~410 logical px tall: the full-size rail ran off
+    // the bottom (Refresh/Settings hidden behind a scroll nobody could see).
+    final compact = MediaQuery.sizeOf(context).height < 520;
     return Scaffold(
       body: Row(
         children: [
           Focus(
+            canRequestFocus: false,
             skipTraversal: true,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 220),
@@ -299,16 +354,17 @@ class _TVShellState extends State<_TVShell> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 16),
+                  SizedBox(height: compact ? 6 : 16),
                   // Logo / toggle button
                   GestureDetector(
                     onTap: widget.onToggleExpand,
                     child: Container(
                       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                      padding: EdgeInsets.symmetric(
+                          horizontal: 6, vertical: compact ? 2 : 8),
                       child: Row(
                         children: [
-                          const ClapperLogo(size: 36),
+                          ClapperLogo(size: compact ? 28 : 36),
                           if (widget.expanded) ...[
                             const SizedBox(width: 10),
                             Expanded(
@@ -335,9 +391,9 @@ class _TVShellState extends State<_TVShell> {
                     ),
                   ),
                   if (widget.expanded) _RailPlaylistName(),
-                  const SizedBox(height: 8),
+                  SizedBox(height: compact ? 2 : 8),
                   Divider(color: AppColors.divider, height: 1, indent: 10, endIndent: 10),
-                  const SizedBox(height: 8),
+                  SizedBox(height: compact ? 2 : 8),
                   Expanded(
                     child: SingleChildScrollView(
                       child: Column(
@@ -357,6 +413,7 @@ class _TVShellState extends State<_TVShell> {
                               // focus mid-press and the highlight teleports.
                               focusNode: _tabNodes[i],
                               onTap: () => widget.onTabTap(i),
+                              onSelectKey: () => _openTab(i),
                               onMoveRight: _focusContent,
                             ),
                           // Refresh action (between Favourites and Settings).
@@ -378,6 +435,7 @@ class _TVShellState extends State<_TVShell> {
                             autofocus: false,
                             focusNode: _tabNodes[6],
                             onTap: () => widget.onTabTap(6),
+                            onSelectKey: () => _openTab(6),
                             onMoveRight: _focusContent,
                           ),
                         ],
@@ -389,7 +447,7 @@ class _TVShellState extends State<_TVShell> {
                     expanded: widget.expanded,
                     onMoveRight: _focusContent,
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: compact ? 4 : 12),
                 ],
               ),
             ),
@@ -413,6 +471,13 @@ class _TVShellState extends State<_TVShell> {
   }
 }
 
+/// The arrow that leads from the rail into the page: Right, or Left in RTL
+/// layouts where the rail sits on the right-hand side.
+LogicalKeyboardKey _towardContent(BuildContext context) =>
+    Directionality.of(context) == TextDirection.rtl
+        ? LogicalKeyboardKey.arrowLeft
+        : LogicalKeyboardKey.arrowRight;
+
 class _TVRailItem extends StatefulWidget {
   const _TVRailItem({
     required this.tab,
@@ -423,6 +488,7 @@ class _TVRailItem extends StatefulWidget {
     required this.onTap,
     this.focusNode,
     this.onMoveRight,
+    this.onSelectKey,
   });
   final _Tab tab;
   final String label;
@@ -433,6 +499,9 @@ class _TVRailItem extends StatefulWidget {
   final FocusNode? focusNode;
   final VoidCallback? onMoveRight;
 
+  /// OK/Enter on the remote (touch taps use [onTap]); defaults to [onTap].
+  final VoidCallback? onSelectKey;
+
   @override
   State<_TVRailItem> createState() => _TVRailItemState();
 }
@@ -442,6 +511,7 @@ class _TVRailItemState extends State<_TVRailItem> {
 
   @override
   Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).height < 520;
     return Semantics(
       button: true,
       selected: widget.selected,
@@ -455,13 +525,13 @@ class _TVRailItemState extends State<_TVRailItem> {
           if (event.logicalKey == LogicalKeyboardKey.select ||
               event.logicalKey == LogicalKeyboardKey.enter ||
               event.logicalKey == LogicalKeyboardKey.numpadEnter) {
-            widget.onTap();
+            (widget.onSelectKey ?? widget.onTap)();
             return KeyEventResult.handled;
           }
         }
         if (event is KeyDownEvent || event is KeyRepeatEvent) {
-          // Right hands focus into the page content (separate focus scope).
-          if (event.logicalKey == LogicalKeyboardKey.arrowRight &&
+          // Hands focus into the page content (separate focus scope).
+          if (event.logicalKey == _towardContent(context) &&
               widget.onMoveRight != null) {
             widget.onMoveRight!();
             return KeyEventResult.handled;
@@ -473,8 +543,9 @@ class _TVRailItemState extends State<_TVRailItem> {
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
-          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          margin: EdgeInsets.symmetric(horizontal: 8, vertical: compact ? 1 : 2),
+          padding:
+              EdgeInsets.symmetric(horizontal: 10, vertical: compact ? 5 : 10),
           decoration: BoxDecoration(
             color: _focused
                 ? AppColors.focus.withValues(alpha: 0.22)
@@ -578,7 +649,7 @@ class _ProfileRailButtonState extends ConsumerState<_ProfileRailButton> {
             }
           }
           if (event is KeyDownEvent || event is KeyRepeatEvent) {
-            if (event.logicalKey == LogicalKeyboardKey.arrowRight &&
+            if (event.logicalKey == _towardContent(context) &&
                 widget.onMoveRight != null) {
               widget.onMoveRight!();
               return KeyEventResult.handled;

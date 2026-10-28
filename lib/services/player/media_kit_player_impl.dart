@@ -127,6 +127,8 @@ class MediaKitPlayerImpl extends AppPlayer {
   Stream<bool> get bufferingStream => _player.stream.buffering;
   @override
   Stream<Duration> get bufferStream => _player.stream.buffer;
+  @override
+  Stream<String> get errorStream => _player.stream.error;
 
   // ── Tracks ────────────────────────────────────────────────────────────────
 

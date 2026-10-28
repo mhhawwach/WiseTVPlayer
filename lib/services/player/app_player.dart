@@ -1,5 +1,22 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../../features/player/widgets/aspect_mode.dart';
+
+// ── Platform flags ────────────────────────────────────────────────────────────
+
+// ignore: do_not_use_environment
+const String _targetPlatform = String.fromEnvironment('FLUTTER_TARGET_PLATFORM');
+
+/// True for the web build packaged as a Samsung Tizen .wgt. Playback there
+/// uses the native AVPlay pipeline, which renders on the TV's video plane
+/// BEHIND the browser graphics — so player backdrops must be TRANSPARENT
+/// (the "hole punch") instead of black.
+const bool kTizenWeb = kIsWeb && _targetPlatform == 'tizen';
+
+/// Backdrop for the player screens: transparent on Tizen (hole punch for the
+/// AVPlay video plane), black everywhere else.
+const Color playerBackdrop =
+    kTizenWeb ? Colors.transparent : Colors.black;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Platform-neutral player abstraction
@@ -101,6 +118,13 @@ abstract class AppPlayer {
   Stream<bool> get playingStream;
   Stream<bool> get bufferingStream;
   Stream<Duration> get bufferStream;
+
+  /// Playback errors reported by the engine (stream won't open, decoder
+  /// failure, …) as a short reason. Engines may also report recoverable
+  /// hiccups here, so screens should treat an error as fatal only if playback
+  /// isn't progressing (see PlaybackWatchdog). Engines that can't report
+  /// errors leave this empty; the watchdog's open/stall timers still apply.
+  Stream<String> get errorStream => const Stream.empty();
 
   // ── Track info ────────────────────────────────────────────────────────────
   AppTracks get tracks;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../storage/storage_service.dart';
+import '../theme/app_theme.dart';
 
 /// A D-pad-reachable Favourite toggle for detail screens. Works on every remote
 /// (no coloured button required), reflects current state, and persists via
@@ -67,10 +68,9 @@ class _FavouriteButtonState extends State<FavouriteButton> {
       style: OutlinedButton.styleFrom(
         minimumSize: const Size.fromHeight(50),
         foregroundColor: Colors.white70,
-        side: const BorderSide(color: Colors.white24),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-      ),
+      ).copyWith(side: AppTheme.focusRingOr(const BorderSide(color: Colors.white24))),
     );
     return widget.width != null ? SizedBox(width: widget.width, child: btn) : btn;
   }

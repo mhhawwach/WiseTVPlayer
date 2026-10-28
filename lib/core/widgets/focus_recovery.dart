@@ -78,6 +78,12 @@ class _FocusRecoveryState extends State<FocusRecovery> {
           k == LogicalKeyboardKey.enter ||
           k == LogicalKeyboardKey.gameButtonA) {
         _dpadSeen = true;
+        // Android boxes the native TV check misses still need visible
+        // Material focus. (Desktop/web already use keyboard-style highlights.)
+        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+          FocusManager.instance.highlightStrategy =
+              FocusHighlightStrategy.alwaysTraditional;
+        }
       }
     }
     return false;
@@ -121,15 +127,65 @@ class _FocusRecoveryState extends State<FocusRecovery> {
         lg!.requestFocus();
         return;
       }
-      // 2) Otherwise focus the first focusable in the scope that holds focus.
+      // 2) Otherwise focus the top-left visible focusable in the scope that
+      //    holds focus. (Traversal order follows attach order, which after
+      //    async loads can be an off-screen or mid-page node — an invisible
+      //    "focus" the user then has to press blindly to find.)
       final scope = cur is FocusScopeNode ? cur : FocusManager.instance.rootScope;
-      for (final node in scope.traversalDescendants) {
-        if (node.canRequestFocus && !node.skipTraversal && node.context != null) {
-          node.requestFocus();
-          return;
-        }
+      final first = _topLeftVisible(scope);
+      if (first != null) {
+        first.requestFocus();
+        return;
+      }
+      // 3) That scope has nothing focusable at all — e.g. a tab page that is
+      //    empty or still loading (Favourites with no favourites): the new
+      //    branch's Navigator autofocus pulls focus into it and the remote
+      //    goes dead. Return to where the user was, else to the top-left of
+      //    the whole screen (the side rail) — but never behind a popup.
+      if (_isInPopup(cur)) return;
+      if (_isConcrete(lg)) {
+        lg!.requestFocus();
+      } else {
+        _topLeftVisible(FocusManager.instance.rootScope)?.requestFocus();
       }
     });
+  }
+
+  static bool _isInPopup(FocusNode? node) {
+    final ctx = node?.context;
+    return ctx != null && ModalRoute.of(ctx) is PopupRoute;
+  }
+
+  static FocusNode? _topLeftVisible(FocusScopeNode scope) {
+    final view = WidgetsBinding.instance.platformDispatcher.implicitView;
+    final screen = view == null
+        ? null
+        : Offset.zero & (view.physicalSize / view.devicePixelRatio);
+    FocusNode? best;
+    for (final node in scope.traversalDescendants) {
+      // Scopes (whole pages / navigators) have a rect too, but focusing one
+      // highlights nothing.
+      if (node is FocusScopeNode ||
+          !node.canRequestFocus ||
+          node.skipTraversal ||
+          node.context == null) {
+        continue;
+      }
+      final Rect r;
+      try {
+        r = node.rect; // throws for nodes not (yet) laid out
+      } catch (_) {
+        continue;
+      }
+      if (!r.isFinite || r.isEmpty) continue;
+      if (screen != null && !screen.overlaps(r)) continue;
+      if (best == null ||
+          r.top < best.rect.top ||
+          (r.top == best.rect.top && r.left < best.rect.left)) {
+        best = node;
+      }
+    }
+    return best;
   }
 
   @override

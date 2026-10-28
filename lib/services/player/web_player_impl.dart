@@ -34,6 +34,7 @@ class WebPlayerImpl extends AppPlayer {
   final _playingCtrl   = StreamController<bool>.broadcast();
   final _bufferingCtrl = StreamController<bool>.broadcast();
   final _bufferCtrl    = StreamController<Duration>.broadcast();
+  final _errorCtrl     = StreamController<String>.broadcast();
 
   Timer? _pollTimer;
 
@@ -72,7 +73,15 @@ class WebPlayerImpl extends AppPlayer {
       _positionCtrl.add(
           Duration(milliseconds: (_video.currentTime * 1000).round()));
     });
-    _video.onError.listen((e) => debugPrint('WebPlayerImpl: video error $e'));
+    _video.onError.listen((_) {
+      final code = _video.error?.code;
+      _errorCtrl.add('Playback error${code != null ? ' (code $code)' : ''}');
+    });
+    // Raised by the mpegts.js bridge in index.html (live .ts streams).
+    _video.on['wisetverror'].listen((e) {
+      final detail = e is html.CustomEvent ? e.detail : null;
+      _errorCtrl.add('Stream error${detail != null ? ': $detail' : ''}');
+    });
   }
 
   void _startPollTimer() {
@@ -123,6 +132,7 @@ class WebPlayerImpl extends AppPlayer {
   @override Stream<bool>     get playingStream   => _playingCtrl.stream;
   @override Stream<bool>     get bufferingStream => _bufferingCtrl.stream;
   @override Stream<Duration> get bufferStream    => _bufferCtrl.stream;
+  @override Stream<String>   get errorStream     => _errorCtrl.stream;
 
   // ── Tracks (HTML5 TextTrack API) ──────────────────────────────────────────
 
@@ -202,6 +212,7 @@ class WebPlayerImpl extends AppPlayer {
     await _playingCtrl.close();
     await _bufferingCtrl.close();
     await _bufferCtrl.close();
+    await _errorCtrl.close();
   }
 
   // ── Video widget ──────────────────────────────────────────────────────────

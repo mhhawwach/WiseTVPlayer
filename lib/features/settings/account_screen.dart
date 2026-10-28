@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/l10n/app_strings.dart';
 import '../../core/storage/storage_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/load_error.dart';
 import '../../services/xtream_service.dart';
 
 // ── Provider ──────────────────────────────────────────────────────────────────
@@ -44,7 +45,7 @@ class AccountScreen extends ConsumerWidget {
                     color: AppColors.textMuted, size: 48),
                 const SizedBox(height: 16),
                 Text(
-                  e.toString(),
+                  friendlyLoadError(e),
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: AppColors.textSecondary),
                 ),

@@ -15,6 +15,7 @@ import '../../core/widgets/color_shortcut_bar.dart';
 import '../../core/widgets/focusable_card.dart';
 import '../../core/widgets/loading_grid.dart';
 import '../../core/widgets/tv_focus.dart';
+import '../../core/widgets/tv_search_field.dart';
 import '../../data/models/epg_listing.dart';
 import '../../data/models/live_category.dart';
 import '../../data/models/live_stream.dart';
@@ -22,10 +23,12 @@ import '../../features/epg/epg_panel.dart';
 import '../../features/favourites/favourites_screen.dart';
 import '../../features/player/live_player_screen.dart';
 import '../../features/player/widgets/aspect_mode.dart';
+import '../../features/player/widgets/playback_watchdog.dart';
 import '../../features/live_tv/catch_up_panel.dart';
 import '../../features/live_tv/live_categories_screen.dart';
 import '../../services/player/player_factory.dart';
 import '../../services/xtream_service.dart';
+import '../../core/utils/load_error.dart';
 
 // ── View mode (grid of logos ⇄ list with now/next EPG) ─────────────────────────
 
@@ -167,11 +170,11 @@ class _LiveChannelsScreenState extends ConsumerState<LiveChannelsScreen> {
           preferredSize: const Size.fromHeight(52),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-            child: TextField(
+            child: TvSearchField(
               focusNode: _searchFocus,
+              hint: 'Search channels...',
               onChanged: (v) => setState(() => _search = v.toLowerCase()),
               decoration: const InputDecoration(
-                hintText: 'Search channels...',
                 prefixIcon: Icon(Icons.search, size: 20),
                 isDense: true,
                 contentPadding: EdgeInsets.symmetric(vertical: 10),
@@ -183,7 +186,7 @@ class _LiveChannelsScreenState extends ConsumerState<LiveChannelsScreen> {
       body: channelsAsync.when(
         loading: () => const LoadingGrid(aspectRatio: 1.55),
         error: (e, _) => Center(
-          child: Text(e.toString(),
+          child: Text(friendlyLoadError(e),
               style: const TextStyle(color: AppColors.textSecondary)),
         ),
         data: (channels) {
@@ -792,7 +795,7 @@ class _LiveTwoPaneScreenState extends ConsumerState<LiveTwoPaneScreen> {
       body: categoriesAsync.when(
         loading: () => const LoadingGrid(),
         error: (e, _) => Center(
-          child: Text(e.toString(),
+          child: Text(friendlyLoadError(e),
               style: const TextStyle(color: AppColors.textSecondary)),
         ),
         data: (categories) {
@@ -836,13 +839,12 @@ class _LiveTwoPaneScreenState extends ConsumerState<LiveTwoPaneScreen> {
                       // category while there's a query).
                       Padding(
                         padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
-                        child: TextField(
+                        child: TvSearchField(
                           focusNode: _searchFocus,
+                          hint: 'Search all channels...',
                           onChanged: (v) =>
                               setState(() => _search = v.toLowerCase()),
-                          textInputAction: TextInputAction.search,
                           decoration: const InputDecoration(
-                            hintText: 'Search all channels...',
                             prefixIcon: Icon(Icons.search, size: 20),
                             isDense: true,
                             contentPadding:
@@ -919,6 +921,8 @@ class _LiveRightPaneState extends ConsumerState<_LiveRightPane> {
   Timer? _previewTimer;
   int? _previewId;
   String _previewName = '';
+  PlaybackWatchdog? _previewWatch;
+  bool _previewFailed = false;
 
   // Tracks the highlighted channel so the yellow shortcut can favourite it,
   // and a key so the blue shortcut can open the sort menu.
@@ -956,8 +960,20 @@ class _LiveRightPaneState extends ConsumerState<_LiveRightPane> {
       final pl = id != null ? StorageService.getPlaylist(id) : null;
       if (pl == null) return;
       _previewId = ch.streamId;
-      setState(() => _previewName = ch.name);
-      _ensurePreview().open(pl.liveStreamUrl(ch.streamId.toString(), 'ts'));
+      setState(() {
+        _previewName = ch.name;
+        _previewFailed = false;
+      });
+      final player = _ensurePreview();
+      player.open(pl.liveStreamUrl(ch.streamId.toString(), 'ts'));
+      _previewWatch?.dispose();
+      _previewWatch = PlaybackWatchdog(
+        player: player,
+        openTimeout: const Duration(seconds: 12),
+        onFailure: (_) {
+          if (mounted) setState(() => _previewFailed = true);
+        },
+      );
     });
   }
 
@@ -967,6 +983,8 @@ class _LiveRightPaneState extends ConsumerState<_LiveRightPane> {
   /// re-buffer). Otherwise just stop the preview and return null (fresh open).
   AppPlayer? _handoffForOpen(LiveStream ch) {
     _previewTimer?.cancel();
+    _previewWatch?.dispose();
+    _previewWatch = null;
     if (_preview != null && _previewId == ch.streamId) {
       final warm = _preview;
       // Drop our reference WITHOUT disposing — the fullscreen player owns it
@@ -985,6 +1003,7 @@ class _LiveRightPaneState extends ConsumerState<_LiveRightPane> {
   @override
   void dispose() {
     _previewTimer?.cancel();
+    _previewWatch?.dispose();
     _preview?.dispose();
     super.dispose();
   }
@@ -1041,7 +1060,7 @@ class _LiveRightPaneState extends ConsumerState<_LiveRightPane> {
             child: channelsAsync.when(
             loading: () => const LoadingGrid(aspectRatio: 1.55),
             error: (e, _) => Center(
-              child: Text(e.toString(),
+              child: Text(friendlyLoadError(e),
                   style: const TextStyle(color: AppColors.textSecondary)),
             ),
             data: (channels) {
@@ -1068,7 +1087,11 @@ class _LiveRightPaneState extends ConsumerState<_LiveRightPane> {
                       Expanded(child: list),
                       SizedBox(
                         width: pvW,
-                        child: _PreviewPane(player: _ensurePreview(), name: _previewName),
+                        child: _PreviewPane(
+                          player: _ensurePreview(),
+                          name: _previewName,
+                          failed: _previewFailed,
+                        ),
                       ),
                     ],
                   );
@@ -1085,9 +1108,14 @@ class _LiveRightPaneState extends ConsumerState<_LiveRightPane> {
 
 // Mini-preview pane shown to the right of the channel list on wide screens.
 class _PreviewPane extends StatelessWidget {
-  const _PreviewPane({required this.player, required this.name});
+  const _PreviewPane({
+    required this.player,
+    required this.name,
+    this.failed = false,
+  });
   final AppPlayer player;
   final String name;
+  final bool failed;
 
   @override
   Widget build(BuildContext context) {
@@ -1102,7 +1130,28 @@ class _PreviewPane extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
               child: ColoredBox(
                 color: Colors.black,
-                child: player.buildVideoWidget(context, AspectMode.contain),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    player.buildVideoWidget(context, AspectMode.contain),
+                    if (failed)
+                      const Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.signal_wifi_off_rounded,
+                                color: AppColors.textMuted, size: 32),
+                            SizedBox(height: 8),
+                            Text('No signal',
+                                style: TextStyle(
+                                    color: AppColors.textSecondary,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),

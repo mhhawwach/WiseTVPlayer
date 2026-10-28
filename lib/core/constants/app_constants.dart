@@ -52,10 +52,10 @@ class AppConstants {
   static const String keyWallpaper = 'app_wallpaper';
   static const String keyLocale    = 'app_locale';
 
-  // Update checker — point this at your version.json host
-  // Format: {"version":"1.0.1","required":false,"notes":"...","download_url":"..."}
+  // Update checker — the latest GitHub release (tag vX.Y.Z; assets
+  // WiseTVPlayer.apk and WiseVodPlayer-Setup-X.Y.Z.exe). See UpdateService.
   static const String updateCheckUrl =
-      'https://raw.githubusercontent.com/YOUR_ORG/wisetv-releases/main/version.json';
+      'https://api.github.com/repos/mhhawwach/WiseTVPlayer/releases/latest';
 
   // UI
   static const double tvFontScale = 1.4;

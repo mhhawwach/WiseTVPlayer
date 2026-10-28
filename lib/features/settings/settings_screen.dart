@@ -399,11 +399,12 @@ class _LanguagePicker extends ConsumerWidget {
           const Icon(Icons.language_rounded, size: 20,
               color: AppColors.textSecondary),
           const SizedBox(width: 12),
-          Expanded(
-            child: Text(label,
-                style: const TextStyle(
-                    fontSize: 15, fontWeight: FontWeight.w500)),
-          ),
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 15, fontWeight: FontWeight.w500)),
+          // Keep the chips next to the label, in line with the rows above and
+          // below: at the far edge they're outside the D-pad's vertical path.
+          const SizedBox(width: 24),
           // Toggle chips: EN | AR
           _LangChip(
             label: s.langEnglish,
@@ -446,7 +447,7 @@ class _LangChip extends StatelessWidget {
             const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
           color: selected
-              ? AppColors.primary.withValues(alpha: 0.18)
+              ? AppColors.primary.withValues(alpha: 0.45)
               : AppColors.surfaceVariant,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
@@ -454,10 +455,12 @@ class _LangChip extends StatelessWidget {
             width: selected ? 1.5 : 1.0,
           ),
         ),
+        // White on the selected fill: accent-coloured text is unreadable under
+        // the cyan focus tint.
         child: Text(
           label,
           style: TextStyle(
-            color: selected ? AppColors.primary : AppColors.textSecondary,
+            color: selected ? AppColors.textPrimary : AppColors.textSecondary,
             fontSize: 12,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
           ),

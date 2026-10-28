@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -11,6 +12,7 @@ import '../../services/now_playing_service.dart';
 import '../../services/pip_service.dart';
 import '../../services/player/player_factory.dart';
 import 'widgets/aspect_mode.dart';
+import 'widgets/playback_watchdog.dart';
 import 'widgets/player_control_button.dart';
 import 'widgets/stats_overlay.dart';
 import 'widgets/track_picker_sheet.dart';
@@ -68,6 +70,11 @@ class _VodPlayerScreenState extends State<VodPlayerScreen>
   Timer? _hideTimer;
   AspectMode _aspectMode = AspectMode.contain;
 
+  // Shown instead of an endless black screen when the stream fails.
+  PlaybackWatchdog? _watchdog;
+  String? _failure;
+  Duration _resumeAt = Duration.zero;
+
   // ── D-pad focus ─────────────────────────────────────────────────────────
   // The root node holds focus while the controls are hidden, so the first key
   // press wakes them. When shown, focus moves into [_controlsScope] so the
@@ -116,6 +123,7 @@ class _VodPlayerScreenState extends State<VodPlayerScreen>
               ));
     _streamUrl = url;
     _player.open(url);
+    _watchdog = PlaybackWatchdog(player: _player, onFailure: _onPlaybackFailure);
 
     StorageService.saveHistory({
       'type': widget.args.historyType,
@@ -190,6 +198,7 @@ class _VodPlayerScreenState extends State<VodPlayerScreen>
 
   @override
   void dispose() {
+    _watchdog?.dispose();
     _hideTimer?.cancel();
     _pipSub?.cancel();
     _completionSub?.cancel();
@@ -267,28 +276,63 @@ class _VodPlayerScreenState extends State<VodPlayerScreen>
 
   void _enterPip() => PipService.instance.enter();
 
+  void _onPlaybackFailure(String reason) {
+    if (!mounted) return;
+    _hideTimer?.cancel();
+    final pos = _player.state.position;
+    if (pos > _resumeAt) _resumeAt = pos;
+    setState(() {
+      _failure = reason;
+      _controlsVisible = false;
+    });
+  }
+
+  void _retry() {
+    setState(() => _failure = null);
+    _player.open(_streamUrl);
+    _watchdog?.restart();
+    final resumeAt = _resumeAt > widget.args.startPosition
+        ? _resumeAt
+        : widget.args.startPosition;
+    if (resumeAt > const Duration(seconds: 5)) {
+      _player.durationStream.firstWhere((d) => d > Duration.zero).then((_) {
+        if (mounted) _player.seek(resumeAt);
+      });
+    }
+    _showControls();
+  }
+
+  // Back closes the stats overlay first, otherwise leaves the player.
+  void _onPopInvoked(bool didPop, Object? _) {
+    if (!didPop && _statsVisible) setState(() => _statsVisible = false);
+  }
+
   // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
+    return PopScope(
+      canPop: !_statsVisible,
+      onPopInvokedWithResult: _onPopInvoked,
+      child: Scaffold(
+      backgroundColor: playerBackdrop,
       body: Focus(
         focusNode: _rootFocusNode,
         autofocus: true,
         onKeyEvent: (_, event) {
           if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-          // Back / Escape: close the stats overlay first, otherwise exit.
-          if (event.logicalKey == LogicalKeyboardKey.goBack ||
-              event.logicalKey == LogicalKeyboardKey.escape) {
-            if (_statsVisible) {
-              setState(() => _statsVisible = false);
-              return KeyEventResult.handled;
-            }
-            Navigator.of(context).pop();
+          // Escape (keyboards) and the web build's remote Back. On Android the
+          // system Back reaches PopScope through the router; handling the key
+          // here as well popped twice — the player AND the page beneath it.
+          if (event.logicalKey == LogicalKeyboardKey.escape ||
+              (kIsWeb && event.logicalKey == LogicalKeyboardKey.goBack)) {
+            Navigator.of(context).maybePop();
             return KeyEventResult.handled;
           }
+
+          // The error card's buttons own the remote while it is shown.
+          if (_failure != null) return KeyEventResult.ignored;
 
           // Colour buttons: Yellow = Favourite, Red = Stats, Green = Tracks,
           // Blue = Aspect ratio.
@@ -349,7 +393,8 @@ class _VodPlayerScreenState extends State<VodPlayerScreen>
                 child: FocusScope(
                   node: _controlsScope,
                   child: ExcludeFocus(
-                    excluding: !_controlsVisible || _inPipMode,
+                    excluding:
+                        !_controlsVisible || _inPipMode || _failure != null,
                     child: _VodControls(
                       title: widget.args.vod.name,
                       player: _player,
@@ -382,6 +427,16 @@ class _VodPlayerScreenState extends State<VodPlayerScreen>
                     ),
                   ),
                 ),
+              // ── Playback failure ──────────────────────────────────────────
+              if (_failure != null && !_inPipMode)
+                Positioned.fill(
+                  child: PlaybackErrorOverlay(
+                    title: widget.args.vod.name,
+                    reason: _failure!,
+                    onRetry: _retry,
+                    onBack: () => Navigator.of(context).maybePop(),
+                  ),
+                ),
               // ── "Up Next" pill (series, final 3 minutes) ──────────────────
               if (_showNextPill && !_inPipMode && widget.args.nextLabel != null)
                 Positioned(
@@ -397,6 +452,7 @@ class _VodPlayerScreenState extends State<VodPlayerScreen>
             ],
           ),
         ),
+      ),
       ),
     );
   }

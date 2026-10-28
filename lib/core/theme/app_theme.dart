@@ -184,6 +184,29 @@ class AppTheme {
     return _build(transparentScaffold: hasWallpaper);
   }
 
+  /// D-pad focus ring for Material buttons. Keyed off [WidgetState.focused],
+  /// which a button carries whenever it holds focus — unlike the default
+  /// focus overlay, which is faint and hidden entirely in touch highlight mode.
+  /// Buttons that set their own `side` must merge this in themselves.
+  static final WidgetStateProperty<BorderSide?> focusRing =
+      WidgetStateProperty.resolveWith((states) =>
+          states.contains(WidgetState.focused)
+              ? const BorderSide(color: AppColors.focus, width: 3)
+              : null);
+
+  /// [focusRing] for a button that draws its own [side] when unfocused.
+  static WidgetStateProperty<BorderSide?> focusRingOr(BorderSide side) =>
+      WidgetStateProperty.resolveWith((states) =>
+          states.contains(WidgetState.focused)
+              ? const BorderSide(color: AppColors.focus, width: 3)
+              : side);
+
+  static final WidgetStateProperty<Color?> focusFill =
+      WidgetStateProperty.resolveWith((states) =>
+          states.contains(WidgetState.focused)
+              ? AppColors.focus.withValues(alpha: 0.18)
+              : null);
+
   static ThemeData _build({bool transparentScaffold = false}) => ThemeData(
     useMaterial3: true,
     brightness: Brightness.dark,
@@ -241,7 +264,19 @@ class AppTheme {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
         textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-      ),
+      ).copyWith(side: focusRing),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: ButtonStyle(side: focusRing),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: ButtonStyle(side: focusRing, backgroundColor: focusFill),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: ButtonStyle(side: focusRing),
+    ),
+    iconButtonTheme: IconButtonThemeData(
+      style: ButtonStyle(side: focusRing, backgroundColor: focusFill),
     ),
     dividerTheme: DividerThemeData(
       color: AppColors.divider,

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets"
-        id="http://wiseapps.com/wisevodplayer" version="2.0.0" viewmodes="maximized">
+        id="http://wiseapps.com/wisevodplayer" version="1.0.21" viewmodes="maximized">
     <!-- packageId (WiseVod001) is 10 chars; Tizen Studio may reassign it to match
          your signing profile. appId = packageId + "." + appName. -->
     <tizen:application id="WiseVod001.WiseVodPlayer" package="WiseVod001" required_version="2.4"/>

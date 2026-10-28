@@ -123,6 +123,13 @@
               { type: 'mpegts', isLive: true, url: url },
               { liveBufferLatencyChasing: true, enableWorker: true });
             player.attachMediaElement(video);
+            // Surface fatal stream errors to Dart (web_player_impl.dart).
+            player.on(mpegts.Events.ERROR, function (type, detail) {
+              try {
+                video.dispatchEvent(new CustomEvent('wisetverror',
+                    { detail: String(type) + ' / ' + String(detail) }));
+              } catch (e) {}
+            });
             player.load();
             var pp = video.play();
             if (pp && pp.catch) pp.catch(function () {});

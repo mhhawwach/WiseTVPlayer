@@ -66,12 +66,11 @@ class _ProfilesScreenState extends ConsumerState<ProfilesScreen> {
             style: OutlinedButton.styleFrom(
               minimumSize: const Size.fromHeight(52),
               foregroundColor: AppColors.primary,
-              side: BorderSide(color: AppColors.primary.withValues(alpha: 0.5)),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14)),
               textStyle:
                   const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-            ),
+            ).copyWith(side: AppTheme.focusRingOr(BorderSide(color: AppColors.primary.withValues(alpha: 0.5)))),
           ),
 
           const SizedBox(height: 8),

@@ -8,6 +8,7 @@ import '../../core/storage/storage_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/tv_text_field.dart';
 import '../../data/models/playlist.dart';
+import '../../core/utils/load_error.dart';
 import '../../services/xtream_service.dart';
 
 class AddPlaylistScreen extends ConsumerStatefulWidget {
@@ -100,7 +101,7 @@ class _AddPlaylistScreenState extends ConsumerState<AddPlaylistScreen> {
     } on DioException catch (e) {
       setState(() => _error = _dioMessage(e));
     } catch (e) {
-      setState(() => _error = 'Unexpected error: $e');
+      setState(() => _error = friendlyLoadError(e));
     } finally {
       _hintTimer?.cancel();
       if (mounted) setState(() { _loading = false; _hint = ''; });

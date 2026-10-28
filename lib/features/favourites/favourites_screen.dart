@@ -76,7 +76,10 @@ class FavouritesScreen extends StatelessWidget {
                   Text('No favourites yet',
                       style: TextStyle(color: AppColors.textSecondary, fontSize: 16)),
                   SizedBox(height: 6),
-                  Text('Press the yellow button while watching to add one.',
+                  Text(
+                      'Use the Favourite button on a movie or series page, '
+                      'or the yellow remote key while watching.',
+                      textAlign: TextAlign.center,
                       style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
                 ],
               ),

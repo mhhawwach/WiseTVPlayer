@@ -9,6 +9,7 @@ import '../../data/models/epg_listing.dart';
 import '../../data/models/live_stream.dart';
 import '../../data/models/vod_stream.dart';
 import '../../features/player/vod_player_screen.dart';
+import '../../core/utils/load_error.dart';
 import '../../services/xtream_service.dart';
 
 /// Fetches the full EPG for a channel — up to 10 entries including past.
@@ -97,7 +98,7 @@ class _CatchUpSheet extends ConsumerWidget {
                       strokeWidth: 2, color: AppColors.primary),
                 ),
                 error: (e, _) => Center(
-                  child: Text('Failed to load EPG\n$e',
+                  child: Text('Failed to load EPG\n${friendlyLoadError(e)}',
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                           color: AppColors.textSecondary, fontSize: 13)),

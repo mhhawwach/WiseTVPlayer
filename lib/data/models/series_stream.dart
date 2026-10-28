@@ -52,12 +52,29 @@ class SeriesStream extends Equatable {
         lastModified: j['last_modified']?.toString() ?? '',
         rating: j['rating']?.toString() ?? '',
         ratingFiveItem: j['rating_5based']?.toString() ?? '',
-        backdropPath: j['backdrop_path']?.toString() ?? '',
+        backdropPath: _firstUrl(j['backdrop_path']),
         youtubeTrailer: j['youtube_trailer']?.toString() ?? '',
-        episodeRunTime:
-            j['episode_run_time'] is int ? j['episode_run_time'] as int : int.tryParse(j['episode_run_time']?.toString() ?? '0') ?? 0,
+        episodeRunTime: _runTimeMinutes(j['episode_run_time']),
         categoryId: j['category_id']?.toString() ?? '',
       );
+
+  // Xtream sends backdrop_path as a LIST of URLs (stringifying it gives the
+  // invalid "[http://…]"). Cached entries may hold that stringified form.
+  static String _firstUrl(Object? value) {
+    if (value is List) return value.isEmpty ? '' : value.first?.toString() ?? '';
+    final s = value?.toString().trim() ?? '';
+    if (!s.startsWith('[')) return s;
+    final inner = s.substring(1, s.endsWith(']') ? s.length - 1 : s.length);
+    return inner.split(',').first.trim().replaceAll('"', '');
+  }
+
+  // Providers mix minutes (45) and seconds (1200 = 20 min). No episode runs
+  // longer than five hours, so larger values are seconds; 0 hides the chip.
+  static int _runTimeMinutes(Object? value) {
+    final raw = value is int ? value : int.tryParse(value?.toString() ?? '') ?? 0;
+    final minutes = raw > 300 ? (raw / 60).round() : raw;
+    return minutes > 0 && minutes <= 300 ? minutes : 0;
+  }
 
   @override
   List<Object?> get props => [seriesId];

@@ -27,8 +27,21 @@ class PlaylistsNotifier extends StateNotifier<List<Playlist>> {
   }
 }
 
-class PlaylistsScreen extends ConsumerWidget {
+class PlaylistsScreen extends ConsumerStatefulWidget {
   const PlaylistsScreen({super.key});
+
+  @override
+  ConsumerState<PlaylistsScreen> createState() => _PlaylistsScreenState();
+}
+
+class _PlaylistsScreenState extends ConsumerState<PlaylistsScreen> {
+  final FocusNode _activeTileFocus = FocusNode(debugLabel: 'active-playlist');
+
+  @override
+  void dispose() {
+    _activeTileFocus.dispose();
+    super.dispose();
+  }
 
   Future<void> _addPlaylist(BuildContext context, WidgetRef ref) async {
     final before = StorageService.activePlaylistId;
@@ -38,10 +51,17 @@ class PlaylistsScreen extends ConsumerWidget {
     if (StorageService.activePlaylistId != before) {
       invalidateAllContent(ref);
     }
+    // Returning from the form restores focus to the "+" that opened it;
+    // land on the (new) active playlist instead, the obvious next step.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _activeTileFocus.context != null) {
+        _activeTileFocus.requestFocus();
+      }
+    });
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final playlists = ref.watch(playlistsProvider);
     final activeId = StorageService.activePlaylistId;
 
@@ -66,6 +86,7 @@ class PlaylistsScreen extends ConsumerWidget {
                 return _PlaylistTile(
                   playlist: p,
                   isActive: p.id == activeId,
+                  focusNode: p.id == activeId ? _activeTileFocus : null,
                   autofocus: i == 0, // land the D-pad highlight on the first tile
                   onTap: () {
                     if (p.id == activeId) {
@@ -106,6 +127,7 @@ class _PlaylistTile extends StatelessWidget {
     required this.onTap,
     required this.onDelete,
     this.autofocus = false,
+    this.focusNode,
   });
 
   final Playlist playlist;
@@ -113,6 +135,7 @@ class _PlaylistTile extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onDelete;
   final bool autofocus;
+  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) {
@@ -124,6 +147,7 @@ class _PlaylistTile extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         autofocus: autofocus,
+        focusNode: focusNode,
         borderRadius: BorderRadius.circular(12),
         child: Container(
           decoration: BoxDecoration(

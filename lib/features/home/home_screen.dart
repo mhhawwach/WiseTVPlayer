@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/language/language_prefs.dart';
 import '../../core/perf/perf_profile.dart';
+import '../../core/providers/content_refresh.dart';
 import '../../core/providers/wallpaper_provider.dart';
 import '../../core/storage/storage_service.dart';
 import '../../core/theme/app_theme.dart';
@@ -90,6 +91,23 @@ class HomeScreen extends ConsumerWidget {
                 surfaceTintColor: Colors.transparent,
                 elevation: 0,
                 toolbarHeight: 56,
+                // Content scrolls underneath the pinned bar; without a backdrop
+                // the posters showed straight through the title.
+                // (A childless DecoratedBox would size itself to zero here.)
+                flexibleSpace: SizedBox.expand(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          AppColors.background.withValues(alpha: 0.97),
+                          AppColors.background.withValues(alpha: 0.85),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
                 title: Row(
                   children: [
                     Container(
@@ -146,7 +164,8 @@ class HomeScreen extends ConsumerWidget {
               SliverToBoxAdapter(
                 child: vodAsync.when(
                   loading: () => const _HeroShimmer(),
-                  error: (_, __) => const SizedBox(height: 12),
+                  error: (_, __) =>
+                      _LoadError(onRetry: () => invalidateAllContent(ref)),
                   data: (movies) {
                     final featured = _getFeatured(movies);
                     if (featured.isEmpty) return const SizedBox(height: 12);
@@ -319,7 +338,7 @@ class _HeroBannerState extends State<_HeroBanner> {
     // Honour the low-tier / reduce-motion setting — no ambient carousel motion.
     if (Perf.reduceMotion) return;
     _timer = Timer.periodic(const Duration(seconds: 6), (_) {
-      if (!mounted) return;
+      if (!mounted || _focused || _hovered) return;
       final next = (_page + 1) % widget.featured.length;
       _pageCtrl.animateToPage(
         next,
@@ -329,10 +348,14 @@ class _HeroBannerState extends State<_HeroBanner> {
     });
   }
 
-  // Pause auto-advance while the banner is focused (so the page doesn't slide
-  // out from under the D-pad selection); resume when focus leaves.
-  void _onFocusChange(bool hasFocus) {
-    if (hasFocus) {
+  bool _focused = false;
+  bool _hovered = false;
+
+  // Pause auto-advance while the banner is focused or under the pointer, so
+  // the page can't slide away between the user reading a title and pressing
+  // OK / clicking Play (which would open a different title).
+  void _updateAutoScroll() {
+    if (_focused || _hovered) {
       _timer?.cancel();
     } else {
       _startAutoScroll();
@@ -346,8 +369,20 @@ class _HeroBannerState extends State<_HeroBanner> {
       child: Focus(
         canRequestFocus: false,
         skipTraversal: true,
-        onFocusChange: _onFocusChange,
-        child: Stack(
+        onFocusChange: (f) {
+          _focused = f;
+          _updateAutoScroll();
+        },
+        child: MouseRegion(
+          onEnter: (_) {
+            _hovered = true;
+            _updateAutoScroll();
+          },
+          onExit: (_) {
+            _hovered = false;
+            _updateAutoScroll();
+          },
+          child: Stack(
         children: [
           PageView.builder(
             controller: _pageCtrl,
@@ -381,6 +416,58 @@ class _HeroBannerState extends State<_HeroBanner> {
           ),
         ],
         ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Shown in place of the Home rows when the catalogue failed to load —
+/// otherwise the page was just silently empty.
+class _LoadError extends StatelessWidget {
+  const _LoadError({required this.onRetry});
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
+      child: Column(
+        children: [
+          const Icon(Icons.cloud_off_rounded,
+              color: AppColors.textMuted, size: 44),
+          const SizedBox(height: 12),
+          const Text("Couldn't load movies and series from the server.",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 15)),
+          const SizedBox(height: 16),
+          FocusableCard(
+            autofocus: true,
+            borderRadius: 12,
+            focusScale: 1.05,
+            onPressed: onRetry,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.refresh_rounded, color: Colors.white, size: 20),
+                  SizedBox(width: 8),
+                  Text('Retry',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -15,8 +16,41 @@ import 'core/widgets/focus_recovery.dart';
 class WiseTVPlayerApp extends ConsumerWidget {
   const WiseTVPlayerApp({super.key});
 
+  /// AppColors are plain getters over the active palette, so widgets that don't
+  /// depend on Theme keep painting the old accent after a theme switch until
+  /// something else rebuilds them. Rebuild the whole tree once instead.
+  static void _rebuildEverything() {
+    void mark(Element e) {
+      e.markNeedsBuild();
+      e.visitChildren(mark);
+    }
+
+    WidgetsBinding.instance.rootElement?.visitChildren(mark);
+  }
+
+  /// Always route the platform Back button through the framework.
+  ///
+  /// With Android's predictive back, Flutter tells the OS up front whether it
+  /// wants Back. The root Navigator forwards a nested branch navigator's "I
+  /// can't pop" as-is and ignores the shell's PopScope(canPop: false), so the
+  /// OS closed the app on Back from any tab root, skipping HomeShell's
+  /// "back to Home / press again / Exit?" handling. When nothing in the app can
+  /// pop, the framework still calls SystemNavigator.pop(), so the app exits as
+  /// before from root screens.
+  static bool _handleNavigationNotification(NavigationNotification _) {
+    final state = WidgetsBinding.instance.lifecycleState;
+    if (state != null && state != AppLifecycleState.detached) {
+      SystemNavigator.setFrameworkHandlesBack(true);
+    }
+    return true;
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.listen(themeProvider, (_, __) {
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _rebuildEverything());
+    });
     final router    = ref.watch(appRouterProvider);
     final theme     = ref.watch(themeProvider);
     final wallpaper = ref.watch(wallpaperProvider);
@@ -35,6 +69,7 @@ class WiseTVPlayerApp extends ConsumerWidget {
     return MaterialApp.router(
       title: 'WiseVodPlayer',
       debugShowCheckedModeBanner: false,
+      onNavigationNotification: _handleNavigationNotification,
 
       // Let a mouse / trackpad drag-scroll on desktop & web (Flutter's default
       // only drag-scrolls with touch), so the horizontal home rows can be

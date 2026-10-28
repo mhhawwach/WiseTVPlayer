@@ -20,6 +20,7 @@ import '../../data/models/vod_stream.dart';
 import '../../services/xtream_service.dart';
 import '../favourites/favourites_screen.dart';
 import 'movies_categories_screen.dart' show vodCategoriesProvider;
+import '../../core/utils/load_error.dart';
 
 // ── Sort mode ─────────────────────────────────────────────────────────────────
 
@@ -212,7 +213,7 @@ class _MoviesListScreenState extends ConsumerState<MoviesListScreen> {
         child: async.when(
           loading: () => const LoadingGrid(aspectRatio: 0.7),
           error: (e, _) => Center(
-              child: Text(e.toString(),
+              child: Text(friendlyLoadError(e),
                   style: const TextStyle(color: AppColors.textSecondary))),
           data: (movies) {
             final filtered = _process(movies, langBlocked);
@@ -247,7 +248,7 @@ class _MoviesListScreenState extends ConsumerState<MoviesListScreen> {
                 onFocus: (f) {
                   if (f) _focused = filtered[i];
                 },
-                onTap: () => context.go('/movies/detail', extra: filtered[i]),
+                onTap: () => context.push('/movies/detail', extra: filtered[i]),
               ),
             );
           },

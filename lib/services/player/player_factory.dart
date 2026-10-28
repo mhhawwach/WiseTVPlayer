@@ -13,6 +13,13 @@ import 'web_player_stub.dart'
   // ignore: uri_does_not_exist
   if (dart.library.html) 'web_player_impl.dart' as webplayer;
 
+// Samsung Tizen .wgt build: the TV's web engine never decodes video for
+// inline <video> (audio-only playback with black frames), so the web build
+// packaged for Tizen drives the native AVPlay pipeline instead.
+import 'avplay_player_stub.dart'
+  // ignore: uri_does_not_exist
+  if (dart.library.html) 'avplay_player_impl.dart' as avplayer;
+
 // Tizen: flutter-tizen compiles with dart.library.io but sets the
 // FLUTTER_TARGET_PLATFORM env var. The real implementation is backed by
 // the video_player package (binds to video_player_tizen on Tizen builds).
@@ -40,6 +47,12 @@ class PlayerFactory {
   static AppPlayer create({int? bufferSize}) {
     final buf = bufferSize ?? Perf.mediaBufferBytes;
     if (kIsWeb) {
+      // Samsung Tizen .wgt: native AVPlay (hardware decode on the TV's video
+      // plane). Runtime-guarded so the same bundle still plays in a normal
+      // browser (webapis absent → HTML5 <video> fallback).
+      if (_isTizen && avplayer.AvplayPlayerImpl.isAvailable) {
+        return avplayer.AvplayPlayerImpl();
+      }
       // LG WebOS or any Flutter Web target.
       // Resolves to web_player_impl.dart (HTML5 <video>) at compile time.
       return webplayer.WebPlayerImpl();

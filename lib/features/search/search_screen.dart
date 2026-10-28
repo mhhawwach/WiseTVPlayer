@@ -7,7 +7,7 @@ import '../../core/storage/storage_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/channel_logo.dart';
 import '../../core/widgets/focusable_card.dart';
-import '../../core/widgets/tv_focus.dart';
+import '../../core/widgets/tv_search_field.dart';
 import '../../data/models/live_category.dart';
 import '../../data/models/vod_stream.dart';
 import '../../data/models/series_stream.dart';
@@ -63,18 +63,7 @@ class SearchScreen extends ConsumerStatefulWidget {
 }
 
 class _SearchScreenState extends ConsumerState<SearchScreen> {
-  final _ctrl = TextEditingController();
-  // Escape node: lets the D-pad leave the search box with ↑/↓ (a focused text
-  // editor otherwise swallows them as cursor movement — "stuck in search").
-  final FocusNode _searchFocus = searchEscapeFocusNode();
   String _query = '';
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    _searchFocus.dispose();
-    super.dispose();
-  }
 
   List<_SearchResult> _buildResults(
     AsyncValue<List<VodStream>> vod,
@@ -127,11 +116,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           customSid: '',
           directSource: '',
         );
-        context.go('/movies/detail', extra: vod);
+        // push keeps the results under the details page (go would replace
+        // this tab's stack, so Back would lose them).
+        context.push('/movies/detail', extra: vod);
       case _ResultType.series:
         final s = ref.read(_allSeriesProvider).value?.firstWhere((x) => x.seriesId == r.id);
         if (s == null) return;
-        context.go('/series/detail', extra: s);
+        context.push('/series/detail', extra: s);
     }
   }
 
@@ -160,26 +151,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: TextField(
-          controller: _ctrl,
-          focusNode: _searchFocus,
+        title: TvSearchField(
+          hint: 'Search movies & series...',
           autofocus: true,
           onChanged: (v) => setState(() => _query = v),
           style: const TextStyle(color: AppColors.textPrimary, fontSize: 16),
-          decoration: InputDecoration(
-            hintText: 'Search movies & series...',
-            hintStyle: const TextStyle(color: AppColors.textMuted),
+          decoration: const InputDecoration(
+            hintStyle: TextStyle(color: AppColors.textMuted),
             border: InputBorder.none,
             isDense: true,
-            suffixIcon: _query.isNotEmpty
-                ? IconButton(
-                    icon: const Icon(Icons.clear, color: AppColors.textMuted),
-                    onPressed: () {
-                      _ctrl.clear();
-                      setState(() => _query = '');
-                    },
-                  )
-                : null,
           ),
         ),
       ),

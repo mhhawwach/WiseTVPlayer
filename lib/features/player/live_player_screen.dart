@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -13,6 +14,7 @@ import '../../services/pip_service.dart';
 import '../../services/player/player_factory.dart';
 import '../epg/epg_panel.dart';
 import 'widgets/aspect_mode.dart';
+import 'widgets/playback_watchdog.dart';
 import 'widgets/player_control_button.dart';
 import 'widgets/resolution_badge.dart';
 import 'widgets/stats_overlay.dart';
@@ -60,6 +62,12 @@ class _LivePlayerScreenState extends State<LivePlayerScreen>
   Timer? _hideTimer;
   AspectMode _aspectMode = AspectMode.contain;
 
+  // Live streams that freeze are re-opened silently a few times before the
+  // error card is shown.
+  PlaybackWatchdog? _watchdog;
+  String? _failure;
+  final List<DateTime> _reconnects = [];
+
   // ── D-pad focus ─────────────────────────────────────────────────────────
   // Up/Down always surf channels; the root node holds focus while controls are
   // hidden so any other key wakes them, then focus moves into [_controlsScope]
@@ -104,6 +112,12 @@ class _LivePlayerScreenState extends State<LivePlayerScreen>
       _player = PlayerFactory.create(bufferSize: 8 * 1024 * 1024);
       _play(_currentIndex);
     }
+    _watchdog = PlaybackWatchdog(
+      player: _player,
+      stallTimeout: const Duration(seconds: 12),
+      onStall: _reconnect,
+      onFailure: _onPlaybackFailure,
+    );
     _scheduleHideControls();
     // Controls start visible — land the D-pad on a neutral control so the
     // remote can immediately reach Stats / tracks / aspect.
@@ -132,6 +146,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen>
 
   @override
   void dispose() {
+    _watchdog?.dispose();
     _hideTimer?.cancel();
     _pipSub?.cancel();
     _rootFocusNode.dispose();
@@ -154,7 +169,12 @@ class _LivePlayerScreenState extends State<LivePlayerScreen>
     final ch  = widget.args.channelList[index];
     final url = widget.args.playlist.liveStreamUrl(ch.streamId.toString(), 'ts');
     _currentStreamUrl = url;
-    if (!skipOpen) _player.open(url);
+    if (!skipOpen) {
+      _player.open(url);
+      _reconnects.clear();
+      if (_failure != null) setState(() => _failure = null);
+      _watchdog?.restart();
+    }
     StorageService.saveHistory({
       'type': 'live',
       'id': ch.streamId,
@@ -238,29 +258,69 @@ class _LivePlayerScreenState extends State<LivePlayerScreen>
 
   void _enterPip() => PipService.instance.enter();
 
+  bool _reconnect() {
+    final now = DateTime.now();
+    _reconnects.removeWhere((t) => now.difference(t) > const Duration(minutes: 2));
+    if (_reconnects.length >= 3) return false;
+    _reconnects.add(now);
+    _player.open(_currentStreamUrl);
+    return true;
+  }
+
+  void _onPlaybackFailure(String reason) {
+    if (!mounted) return;
+    _hideTimer?.cancel();
+    setState(() {
+      _failure = reason;
+      _controlsVisible = false;
+    });
+  }
+
+  void _retry() {
+    setState(() => _failure = null);
+    _reconnects.clear();
+    _player.open(_currentStreamUrl);
+    _watchdog?.restart();
+    _showControls();
+  }
+
+  // Back closes the stats overlay first, otherwise leaves the player.
+  void _onPopInvoked(bool didPop, Object? _) {
+    if (!didPop && _statsVisible) setState(() => _statsVisible = false);
+  }
+
   // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     final ch = widget.args.channelList[_currentIndex];
 
-    return Scaffold(
-      backgroundColor: Colors.black,
+    return PopScope(
+      canPop: !_statsVisible,
+      onPopInvokedWithResult: _onPopInvoked,
+      child: Scaffold(
+      backgroundColor: playerBackdrop,
       body: Focus(
         focusNode: _rootFocusNode,
         autofocus: true,
         onKeyEvent: (_, event) {
           if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-          // Back / Escape: close the stats overlay first, otherwise exit.
-          if (event.logicalKey == LogicalKeyboardKey.goBack ||
-              event.logicalKey == LogicalKeyboardKey.escape) {
-            if (_statsVisible) {
-              setState(() => _statsVisible = false);
-              return KeyEventResult.handled;
-            }
-            Navigator.of(context).pop();
+          // Escape (keyboards) and the web build's remote Back. On Android the
+          // system Back reaches PopScope through the router; handling the key
+          // here as well popped twice — the player AND the page beneath it.
+          if (event.logicalKey == LogicalKeyboardKey.escape ||
+              (kIsWeb && event.logicalKey == LogicalKeyboardKey.goBack)) {
+            Navigator.of(context).maybePop();
             return KeyEventResult.handled;
+          }
+
+          // The error card's buttons own Left/Right/OK while it is shown;
+          // Up/Down still change channel.
+          if (_failure != null &&
+              event.logicalKey != LogicalKeyboardKey.arrowUp &&
+              event.logicalKey != LogicalKeyboardKey.arrowDown) {
+            return KeyEventResult.ignored;
           }
 
           // Up/Down always surf channels (and surface the controls briefly),
@@ -322,7 +382,8 @@ class _LivePlayerScreenState extends State<LivePlayerScreen>
                 child: FocusScope(
                   node: _controlsScope,
                   child: ExcludeFocus(
-                    excluding: !_controlsVisible || _inPipMode,
+                    excluding:
+                        !_controlsVisible || _inPipMode || _failure != null,
                     child: _LiveControls(
                       channel: ch,
                       aspectMode: _aspectMode,
@@ -358,6 +419,16 @@ class _LivePlayerScreenState extends State<LivePlayerScreen>
                     child: ResolutionBadge(player: _player),
                   ),
                 ),
+              // ── Playback failure ──────────────────────────────────────────
+              if (_failure != null && !_inPipMode)
+                Positioned.fill(
+                  child: PlaybackErrorOverlay(
+                    title: ch.name,
+                    reason: _failure!,
+                    onRetry: _retry,
+                    onBack: () => Navigator.of(context).maybePop(),
+                  ),
+                ),
               // ── Stats overlay (independent of controls visibility) ─────────
               if (_statsVisible && !_inPipMode)
                 Positioned(
@@ -375,6 +446,7 @@ class _LivePlayerScreenState extends State<LivePlayerScreen>
             ],
           ),
         ),
+      ),
       ),
     );
   }

@@ -54,6 +54,14 @@ Future<void> _bootstrap() async {
   // variant for a frame and then rebuild mid-focus once the async check lands.
   await DeviceUtils.warmup();
 
+  // Android starts Flutter in "touch" highlight mode, which suppresses the
+  // focus glow on every Material widget (buttons, list tiles, switches) — a
+  // TV user saw no highlight at all on those. TVs are always D-pad driven.
+  if (DeviceUtils.isTVSync) {
+    FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.alwaysTraditional;
+  }
+
   runApp(
     const ProviderScope(
       child: WiseTVPlayerApp(),

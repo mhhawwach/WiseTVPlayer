@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -17,6 +19,7 @@ class FocusableCard extends StatefulWidget {
     this.autofocus = false,
     this.focusNode,
     this.focusScale = 1.08,
+    this.semanticLabel,
   });
 
   final Widget child;
@@ -33,6 +36,9 @@ class FocusableCard extends StatefulWidget {
   /// full-width hero) where scaling would overflow.
   final double focusScale;
 
+  /// Screen-reader label, for cards whose content is only an icon or image.
+  final String? semanticLabel;
+
   @override
   State<FocusableCard> createState() => _FocusableCardState();
 }
@@ -41,6 +47,17 @@ class _FocusableCardState extends State<FocusableCard>
     with AutomaticKeepAliveClientMixin {
   bool _focused = false;
   bool _hovered = false;
+  double _scale = 1.0;
+
+  // Grow at most ~12 px per side: posters keep their zoom, while full-width
+  // rows barely grow instead of spilling past the screen edge and the rail.
+  double _scaleForCurrentSize() {
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.hasSize || box.size.width <= 0) {
+      return widget.focusScale;
+    }
+    return math.min(widget.focusScale, 1 + 24 / box.size.width);
+  }
 
   // Keep the focused card alive even if it scrolls out of a lazy list/grid, so
   // focus is never lost by the item being disposed out from under it (the main
@@ -51,13 +68,16 @@ class _FocusableCardState extends State<FocusableCard>
   @override
   Widget build(BuildContext context) {
     super.build(context); // required by AutomaticKeepAliveClientMixin
-    return Focus(
+    final card = Focus(
       focusNode: widget.focusNode,
       autofocus: widget.autofocus,
       onFocusChange: (f) {
         widget.onFocusChange?.call(f);
         if (mounted) {
-          setState(() => _focused = f);
+          setState(() {
+            _focused = f;
+            if (f) _scale = _scaleForCurrentSize();
+          });
           updateKeepAlive();
         }
         // Auto-scroll the focused item into view so D-pad navigation through
@@ -98,7 +118,10 @@ class _FocusableCardState extends State<FocusableCard>
         // click) still drives the highlight; only ambient hover is suppressed.
         onEnter: Perf.reduceMotion
             ? null
-            : (_) => setState(() => _hovered = true),
+            : (_) => setState(() {
+                  _hovered = true;
+                  _scale = _scaleForCurrentSize();
+                }),
         onExit: Perf.reduceMotion
             ? null
             : (_) => setState(() => _hovered = false),
@@ -111,7 +134,7 @@ class _FocusableCardState extends State<FocusableCard>
           // so focus is still unmistakable, just without the GPU cost.
           child: AnimatedScale(
             scale: (!Perf.reduceMotion && (_focused || _hovered))
-                ? widget.focusScale
+                ? _scale
                 : 1.0,
             duration: Perf.reduceMotion
                 ? Duration.zero
@@ -158,5 +181,8 @@ class _FocusableCardState extends State<FocusableCard>
         ),
       ),
     );
+    final label = widget.semanticLabel;
+    if (label == null) return card;
+    return Semantics(button: true, label: label, child: card);
   }
 }

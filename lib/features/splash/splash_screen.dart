@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -76,18 +75,23 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     final hasPlaylists = StorageService.playlists.isNotEmpty;
     // After splash, pick a profile ("Who's watching?") before the menu.
     final destination = hasPlaylists ? '/profiles/select' : '/playlists';
+    // The splash is gone by the time the check returns; show the dialog on
+    // the root navigator, over whatever screen is current.
+    final rootNavigator = GoRouter.of(context).routerDelegate.navigatorKey;
     context.go(destination);
 
-    // Update check — non-blocking; shows over whatever screen is current.
-    // ANDROID ONLY: the in-app updater downloads the GitHub APK. That's wrong on
-    // iOS (App Store handles updates), on web, and on webOS/Windows. Guard it so
-    // it only runs where an APK can actually be installed.
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    // Update check — non-blocking. Android installs the release APK and
+    // Windows runs the release installer; elsewhere updates come from the
+    // stores / TV packages, so UpdateService.supported is false.
+    if (UpdateService.supported) {
       UpdateService.instance
           .checkForUpdate()
-          .timeout(const Duration(seconds: 8), onTimeout: () => null)
+          .timeout(const Duration(seconds: 10), onTimeout: () => null)
           .then((info) {
-        if (info != null && mounted) showUpdateDialog(context, info);
+        final ctx = rootNavigator.currentContext;
+        if (info != null && ctx != null && ctx.mounted) {
+          showUpdateDialog(ctx, info);
+        }
       }).catchError((_) {});
     }
   }

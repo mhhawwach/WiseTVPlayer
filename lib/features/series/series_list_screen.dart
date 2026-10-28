@@ -20,6 +20,7 @@ import '../../data/models/series_stream.dart';
 import '../../services/xtream_service.dart';
 import '../favourites/favourites_screen.dart';
 import 'series_categories_screen.dart' show seriesCategoriesProvider;
+import '../../core/utils/load_error.dart';
 
 // ── Sort mode ─────────────────────────────────────────────────────────────────
 
@@ -207,7 +208,7 @@ class _SeriesListScreenState extends ConsumerState<SeriesListScreen> {
         child: async.when(
           loading: () => const LoadingGrid(aspectRatio: 0.7),
           error: (e, _) => Center(
-              child: Text(e.toString(),
+              child: Text(friendlyLoadError(e),
                   style: const TextStyle(color: AppColors.textSecondary))),
           data: (seriesList) {
             final filtered = _process(seriesList, langBlocked);
@@ -241,7 +242,7 @@ class _SeriesListScreenState extends ConsumerState<SeriesListScreen> {
                 onFocus: (f) {
                   if (f) _focused = filtered[i];
                 },
-                onTap: () => context.go('/series/detail', extra: filtered[i]),
+                onTap: () => context.push('/series/detail', extra: filtered[i]),
               ),
             );
           },

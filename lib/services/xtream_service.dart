@@ -311,7 +311,10 @@ class _RetryInterceptor extends Interceptor {
         e.type == DioExceptionType.sendTimeout ||
         e.type == DioExceptionType.connectionError ||
         (e.type == DioExceptionType.badResponse &&
-            (e.response?.statusCode ?? 0) >= 500);
+            (e.response?.statusCode ?? 0) >= 500) ||
+        // A truncated / garbled body (seen on the 1.4 MB VOD list) fails JSON
+        // decoding; a fresh download is normally fine.
+        (e.type == DioExceptionType.unknown && e.error is FormatException);
   }
 
   @override

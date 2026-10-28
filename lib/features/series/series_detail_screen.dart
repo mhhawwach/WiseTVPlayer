@@ -13,6 +13,7 @@ import '../../core/widgets/focusable_card.dart';
 import '../../data/models/series_stream.dart';
 import '../../features/player/series_player_screen.dart';
 import '../../services/xtream_service.dart';
+import '../../core/utils/load_error.dart';
 
 Future<void> _launchTrailer(String trailer) async {
   if (trailer.isEmpty) return;
@@ -47,16 +48,33 @@ class SeriesDetailScreen extends ConsumerStatefulWidget {
 class _SeriesDetailScreenState extends ConsumerState<SeriesDetailScreen> {
   String _selectedSeason = '';
   final ScrollController _scrollCtrl = ScrollController();
+  // Episodes load after the page opens; until then the only focusable thing is
+  // the app bar's Back arrow, which kept the focus. Hand it to the first
+  // season once they arrive.
+  final FocusNode _firstSeasonFocus = FocusNode(debugLabel: 'first-season');
+  bool _didInitialFocus = false;
 
   @override
   void dispose() {
     _scrollCtrl.dispose();
+    _firstSeasonFocus.dispose();
     super.dispose();
+  }
+
+  void _focusFirstSeason() {
+    if (_didInitialFocus) return;
+    _didInitialFocus = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _firstSeasonFocus.context != null) {
+        _firstSeasonFocus.requestFocus();
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final infoAsync = ref.watch(seriesInfoProvider(widget.series.seriesId));
+    if (infoAsync.hasValue) _focusFirstSeason();
     final isWide = MediaQuery.of(context).size.width > 700;
     final heroHeight = isWide ? 380.0 : 300.0;
 
@@ -85,6 +103,7 @@ class _SeriesDetailScreenState extends ConsumerState<SeriesDetailScreen> {
                     series: widget.series,
                     infoAsync: infoAsync,
                     selectedSeason: _selectedSeason,
+                    firstSeasonFocus: _firstSeasonFocus,
                     onSeasonChanged: (s) =>
                         setState(() => _selectedSeason = s),
                   )
@@ -92,6 +111,7 @@ class _SeriesDetailScreenState extends ConsumerState<SeriesDetailScreen> {
                     series: widget.series,
                     infoAsync: infoAsync,
                     selectedSeason: _selectedSeason,
+                    firstSeasonFocus: _firstSeasonFocus,
                     onSeasonChanged: (s) =>
                         setState(() => _selectedSeason = s),
                   ),
@@ -229,12 +249,14 @@ class _NarrowContent extends StatelessWidget {
     required this.infoAsync,
     required this.selectedSeason,
     required this.onSeasonChanged,
+    required this.firstSeasonFocus,
   });
 
   final SeriesStream series;
   final AsyncValue<SeriesInfo> infoAsync;
   final String selectedSeason;
   final ValueChanged<String> onSeasonChanged;
+  final FocusNode firstSeasonFocus;
 
   @override
   Widget build(BuildContext context) {
@@ -243,7 +265,7 @@ class _NarrowContent extends StatelessWidget {
       child: infoAsync.when(
         loading: () => const _LoadingSection(),
         error: (e, _) => Center(
-            child: Text(e.toString(),
+            child: Text(friendlyLoadError(e),
                 style: const TextStyle(color: AppColors.textSecondary))),
         data: (info) {
           final activeSeason = selectedSeason.isEmpty
@@ -254,6 +276,7 @@ class _NarrowContent extends StatelessWidget {
             info: info,
             selectedSeason: activeSeason,
             onSeasonChanged: onSeasonChanged,
+            firstSeasonFocus: firstSeasonFocus,
           );
         },
       ),
@@ -269,12 +292,14 @@ class _WideContent extends StatelessWidget {
     required this.infoAsync,
     required this.selectedSeason,
     required this.onSeasonChanged,
+    required this.firstSeasonFocus,
   });
 
   final SeriesStream series;
   final AsyncValue<SeriesInfo> infoAsync;
   final String selectedSeason;
   final ValueChanged<String> onSeasonChanged;
+  final FocusNode firstSeasonFocus;
 
   @override
   Widget build(BuildContext context) {
@@ -304,7 +329,7 @@ class _WideContent extends StatelessWidget {
             child: infoAsync.when(
               loading: () => const _LoadingSection(),
               error: (e, _) => Center(
-                  child: Text(e.toString(),
+                  child: Text(friendlyLoadError(e),
                       style:
                           const TextStyle(color: AppColors.textSecondary))),
               data: (info) {
@@ -318,6 +343,7 @@ class _WideContent extends StatelessWidget {
                   info: info,
                   selectedSeason: activeSeason,
                   onSeasonChanged: onSeasonChanged,
+                  firstSeasonFocus: firstSeasonFocus,
                 );
               },
             ),
@@ -336,12 +362,14 @@ class _SeriesBody extends StatelessWidget {
     required this.info,
     required this.selectedSeason,
     required this.onSeasonChanged,
+    required this.firstSeasonFocus,
   });
 
   final SeriesStream series;
   final SeriesInfo info;
   final String selectedSeason;
   final ValueChanged<String> onSeasonChanged;
+  final FocusNode firstSeasonFocus;
 
   @override
   Widget build(BuildContext context) {
@@ -416,12 +444,11 @@ class _SeriesBody extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 foregroundColor: Colors.white70,
-                side: const BorderSide(color: Colors.white24),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10)),
                 textStyle: const TextStyle(
                     fontSize: 13, fontWeight: FontWeight.w600),
-              ),
+              ).copyWith(side: AppTheme.focusRingOr(const BorderSide(color: Colors.white24))),
             ),
           ),
         ],
@@ -451,7 +478,7 @@ class _SeriesBody extends StatelessWidget {
                   // Focusable so a TV remote can pick among multiple seasons
                   // (it also auto-scrolls into view on focus).
                   child: FocusableCard(
-                    autofocus: i == 0,
+                    focusNode: i == 0 ? firstSeasonFocus : null,
                     borderRadius: 20,
                     focusScale: 1.05,
                     onPressed: () => onSeasonChanged(s),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/storage/storage_service.dart';
 import '../../core/theme/app_theme.dart';
 import 'pin_dialog.dart';
+import 'pin_pad.dart';
 
 class PinSetupScreen extends StatefulWidget {
   const PinSetupScreen({super.key});
@@ -24,7 +25,7 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
   void _start() => setState(() => _phase = 'entering');
 
   void _tap(String key) {
-    if (key == '⌫') {
+    if (key == pinBackspace) {
       _backspace();
       return;
     }
@@ -125,12 +126,14 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
         const Divider(),
         if (!_hasPin)
           ListTile(
+            autofocus: true,
             leading: const Icon(Icons.add_moderator_outlined),
             title: const Text('Set PIN'),
             onTap: _start,
           ),
         if (_hasPin) ...[
           ListTile(
+            autofocus: true,
             leading: const Icon(Icons.edit_outlined),
             title: const Text('Change PIN'),
             onTap: _changePin,
@@ -161,7 +164,11 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
     final current = _phase == 'confirming' ? _confirm : _pin;
     final title = _phase == 'confirming' ? 'Confirm PIN' : 'Enter new PIN';
 
-    return Center(
+    // Remotes without number keys use the D-pad pad; ones with digits (and
+    // keyboards) can type straight in.
+    return PinHardwareKeys(
+      onKey: _tap,
+      child: Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 340),
         child: Column(
@@ -175,7 +182,7 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
                     fontSize: 20,
                     fontWeight: FontWeight.w600)),
             const SizedBox(height: 28),
-            _PinDotsRow(length: current.length, error: _error),
+            PinDots(length: current.length, error: _error),
             if (_error) ...[
               const SizedBox(height: 8),
               Text(_errorMsg,
@@ -183,98 +190,11 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
                       color: AppColors.liveRed, fontSize: 12)),
             ],
             const SizedBox(height: 28),
-            _NumPadWidget(onTap: _tap),
+            PinNumPad(onKey: _tap),
           ],
         ),
       ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _PinDotsRow extends StatelessWidget {
-  const _PinDotsRow({required this.length, required this.error});
-  final int length;
-  final bool error;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(4, (i) {
-        final filled = i < length;
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          margin: const EdgeInsets.symmetric(horizontal: 12),
-          width: 18,
-          height: 18,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: error
-                ? AppColors.liveRed
-                : filled
-                    ? AppColors.primary
-                    : Colors.transparent,
-            border: Border.all(
-              color: error
-                  ? AppColors.liveRed
-                  : filled
-                      ? AppColors.primary
-                      : AppColors.textMuted,
-              width: 2,
-            ),
-          ),
-        );
-      }),
-    );
-  }
-}
-
-class _NumPadWidget extends StatelessWidget {
-  const _NumPadWidget({required this.onTap});
-  final ValueChanged<String> onTap;
-
-  static const _rows = [
-    ['1', '2', '3'],
-    ['4', '5', '6'],
-    ['7', '8', '9'],
-    ['', '0', '⌫'],
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: _rows.map((row) {
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: row.map((k) {
-            if (k.isEmpty) return const SizedBox(width: 76, height: 64);
-            return GestureDetector(
-              onTap: () => onTap(k),
-              child: Container(
-                width: 76,
-                height: 64,
-                margin: const EdgeInsets.all(5),
-                decoration: BoxDecoration(
-                  color: AppColors.card,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Center(
-                  child: k == '⌫'
-                      ? const Icon(Icons.backspace_outlined,
-                          color: AppColors.textSecondary, size: 22)
-                      : Text(k,
-                          style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 22,
-                              fontWeight: FontWeight.w600)),
-                ),
-              ),
-            );
-          }).toList(),
-        );
-      }).toList(),
+      ),
     );
   }
 }

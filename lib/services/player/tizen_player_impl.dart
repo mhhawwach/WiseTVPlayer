@@ -39,6 +39,8 @@ class TizenPlayerImpl extends AppPlayer {
   final _playingCtrl   = StreamController<bool>.broadcast();
   final _bufferingCtrl = StreamController<bool>.broadcast();
   final _bufferCtrl    = StreamController<Duration>.broadcast();
+  final _errorCtrl     = StreamController<String>.broadcast();
+  String? _lastError;
 
   // Last-emitted values, so we only push on real change.
   Duration _lastPos = Duration.zero;
@@ -49,7 +51,13 @@ class TizenPlayerImpl extends AppPlayer {
 
   void _onValue() {
     final c = _controller;
-    if (c == null || !c.value.isInitialized) return;
+    if (c == null) return;
+    final err = c.value.errorDescription;
+    if (c.value.hasError && err != _lastError) {
+      _lastError = err;
+      _errorCtrl.add(err ?? 'Playback error');
+    }
+    if (!c.value.isInitialized) return;
     final v = c.value;
 
     if (v.position != _lastPos) {
@@ -107,6 +115,8 @@ class TizenPlayerImpl extends AppPlayer {
   Stream<bool> get bufferingStream => _bufferingCtrl.stream;
   @override
   Stream<Duration> get bufferStream => _bufferCtrl.stream;
+  @override
+  Stream<String> get errorStream => _errorCtrl.stream;
 
   // ── Tracks (not exposed by base video_player) ───────────────────────────────
 
@@ -132,7 +142,13 @@ class TizenPlayerImpl extends AppPlayer {
     final c = VideoPlayerController.networkUrl(Uri.parse(url));
     _controller = c;
     c.addListener(_onValue);
-    await c.initialize();
+    _lastError = null;
+    try {
+      await c.initialize();
+    } catch (e) {
+      _errorCtrl.add('The stream could not be opened ($e)');
+      return;
+    }
     await c.play();
     _onValue();
   }
@@ -176,6 +192,7 @@ class TizenPlayerImpl extends AppPlayer {
     await _playingCtrl.close();
     await _bufferingCtrl.close();
     await _bufferCtrl.close();
+    await _errorCtrl.close();
   }
 
   // ── Video widget ────────────────────────────────────────────────────────────

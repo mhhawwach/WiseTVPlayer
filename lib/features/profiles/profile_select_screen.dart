@@ -26,6 +26,10 @@ class ProfileSelectScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileSelectScreenState extends ConsumerState<ProfileSelectScreen> {
+  // Switching loads the profile's data (seconds on a cold start); show it
+  // and ignore repeat presses meanwhile.
+  String? _switchingTo;
+
   @override
   Widget build(BuildContext context) {
     final profiles = StorageService.profiles;
@@ -58,7 +62,10 @@ class _ProfileSelectScreenState extends ConsumerState<ProfileSelectScreen> {
                       _ProfileTile(
                         profile: profiles[i],
                         autofocus: i == 0,
+                        busy: _switchingTo == profiles[i].id,
                         onTap: () async {
+                          if (_switchingTo != null) return;
+                          setState(() => _switchingTo = profiles[i].id);
                           await ref
                               .read(profileProvider.notifier)
                               .switchProfile(profiles[i].id);
@@ -92,10 +99,12 @@ class _ProfileTile extends StatelessWidget {
     required this.autofocus,
     required this.onTap,
     required this.onEdit,
+    this.busy = false,
   });
 
   final Profile profile;
   final bool autofocus;
+  final bool busy;
   final VoidCallback onTap;
   final VoidCallback onEdit;
 
@@ -131,8 +140,15 @@ class _ProfileTile extends StatelessWidget {
                     ],
                   ),
                   child: Center(
-                    child: Text(profile.emoji,
-                        style: const TextStyle(fontSize: 54)),
+                    child: busy
+                        ? const SizedBox(
+                            width: 44,
+                            height: 44,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 3, color: Colors.white),
+                          )
+                        : Text(profile.emoji,
+                            style: const TextStyle(fontSize: 54)),
                   ),
                 ),
                 const SizedBox(height: 12),
